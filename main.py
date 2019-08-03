@@ -3,16 +3,18 @@ import sys
 import utils
 import pickle
 import tensorflow as tf
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from network import NetworkEncodedStyleGAN
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 
 
 class EncodedStyleGAN(object):
     def __init__(self):
         super(EncodedStyleGAN, self).__init__()
         self.base_option = utils.option.parse()
+        self.is_initialized = False
 
 
     def _initialize(self):
@@ -25,12 +27,18 @@ class EncodedStyleGAN(object):
         #     _, _, Gs = pickle.load(f)
 
         self.network = NetworkEncodedStyleGAN(
-            stylegan_model=Gs.components.synthesis,
-            stylegan_graph=tf.get_default_graph(),
-            stylegan_session=tf.get_default_session())
+            data_dir = self.base_option['data_dir'],
+            minibatch_size = self.base_option['minibatch_size'],
+            stylegan_model=Gs.components.synthesis)
+
+        self.network.build()
+        self.is_initialized = True
+
+    def train(self):
+        if not self.is_initialized: self._initialize()
+        self.network.train()
 
 
 if __name__=='__main__':
-    a = EncodedStyleGAN()
-    a._initialize()
-    import ipdb; ipdb.set_trace()
+    experiment = EncodedStyleGAN()
+    experiment.train()
