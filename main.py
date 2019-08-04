@@ -36,7 +36,7 @@ class EncodedStyleGAN(object):
 
     def train(self):
         if not self.is_initialized: self._initialize()
-        self.network.train()
+        self.network.train(learning_rate=self.base_option['learning_rate'], num_iter=self.base_option['num_iter'], save_iter=self.base_option['save_iter'], result_dir=self.base_option['result_dir'])
 
 
 if __name__=='__main__':

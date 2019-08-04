@@ -7,7 +7,7 @@ class DatasetEncodedStyleGAN(object):
         super(DatasetEncodedStyleGAN, self).__init__()
         self.data_dir = data_dir
         self.minibatch_size = minibatch_size
-        self.dataset = dataset.load_dataset(data_dir=self.data_dir, tfrecord_dir='ffhq', verbose=True)
+        self.dataset = dataset.load_dataset(data_dir=self.data_dir, tfrecord_dir='ffhq', verbose=False)
         self.dataset.configure(self.minibatch_size)
         self.is_built = False
 

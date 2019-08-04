@@ -1,4 +1,6 @@
+import numpy as np
 import tensorflow as tf
+from stylegan.training.networks_stylegan import *
 
 
 class ModelEncodedStyleGAN(object):
@@ -11,8 +13,10 @@ class ModelEncodedStyleGAN(object):
 
     def build(self, input):
         self.encoded_latent = self.encoder.build(input)
+        self.original_image = tf.transpose(input, perm=[0,2,3,1])
         self.recovered_image = self.generator.build(self.encoded_latent)
-        self.perceptual_features = self.perceptor.build(self.recovered_image), self.perceptor.build(input)
+        self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
+        self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
         self.is_built = True
 
 
@@ -22,10 +26,9 @@ class Encoder(object):
 
     def build(self,
         input,                              # First input: Images [minibatch, channel, height, width].
-        out_shape           = [512],
-        labels_in           = None,         # Second input: Labels [minibatch, label_size].
-        num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
-        resolution          = 32,           # Input resolution. Overridden based on dataset.
+        out_shape           = [18, 512],
+        num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
+        resolution          = 1024,           # Input resolution. Overridden based on dataset.
         label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
         fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
         fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
@@ -37,29 +40,28 @@ class Encoder(object):
         dtype               = 'float32',    # Data type to use for activations and outputs.
         fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
         blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
-        structure           = 'auto',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
+        structure           = 'fixed',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
         is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
         **_kwargs):                         # Ignore unrecognized keyword args.
 
         resolution_log2 = int(np.log2(resolution))
         assert resolution == 2**resolution_log2 and resolution >= 4
+        assert isinstance(out_shape, list) or isinstance(out_shape, tuple)
         def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
         def blur(x): return blur2d(x, blur_filter) if blur_filter else x
         if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
         act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
+        out_fmap = np.prod(out_shape)
 
-        images_in.set_shape([None, num_channels, resolution, resolution])
-        # labels_in.set_shape([None, label_size])
-        images_in = tf.cast(images_in, dtype)
-        # labels_in = tf.cast(labels_in, dtype)
+        input.set_shape([None, num_channels, resolution, resolution])
+        input = tf.cast(input, dtype)
         lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
-        scores_out = None
+        output = None
 
         # Building blocks.
         def fromrgb(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('encoder'):
-                with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
-                    return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
+            with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
+                return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
         def block(x, res): # res = 2..resolution_log2
             with tf.variable_scope('%dx%d' % (2**res, 2**res)):
                 if res >= 3: # 8x8 and up
@@ -75,27 +77,22 @@ class Encoder(object):
                     with tf.variable_scope('Dense0'):
                         x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                     with tf.variable_scope('Dense1'):
-                        out_shape_product = 1
-                        for i in out_shape:
-                            out_shape_product *= i
-                        x = apply_bias(dense(x, fmaps=out_shape_product, gain=1, use_wscale=use_wscale))
+                        x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
                         x = tf.reshape(x, [-1]+out_shape)
                 return x
 
         # Fixed structure: simple and efficient, but does not support progressive growing.
         if structure == 'fixed':
-            print('=====FIXED=====')
             with tf.variable_scope('encoder'):
-                x = fromrgb(images_in, resolution_log2)
+                x = fromrgb(input, resolution_log2)
                 for res in range(resolution_log2, 2, -1):
                     x = block(x, res)
-                scores_out = block(x, 2)
+                output = block(x, 2)
 
         # Linear structure: simple but inefficient.
         if structure == 'linear':
-            print('=====LINEAR=====')
             with tf.variable_scope('encoder'):
-                img = images_in
+                img = input
                 x = fromrgb(img, resolution_log2)
                 for res in range(resolution_log2, 2, -1):
                     lod = resolution_log2 - res
@@ -104,33 +101,24 @@ class Encoder(object):
                     y = fromrgb(img, res - 1)
                     with tf.variable_scope('Grow_lod%d' % lod):
                         x = tflib.lerp_clip(x, y, lod_in - lod)
-                scores_out = block(x, 2)
+                output = block(x, 2)
 
         # Recursive structure: complex but efficient.
         if structure == 'recursive':
-            print('=====RECURSIVE=====')
             with tf.variable_scope('encoder'):
                 def cset(cur_lambda, new_cond, new_lambda):
                     return lambda: tf.cond(new_cond, new_lambda, cur_lambda)
                 def grow(res, lod):
-                    x = lambda: fromrgb(downscale2d(images_in, 2**lod), res)
+                    x = lambda: fromrgb(downscale2d(input, 2**lod), res)
                     if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
                     x = block(x(), res); y = lambda: x
-                    if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
+                    if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(input, 2**(lod+1)), res - 1), lod_in - lod))
                     return y()
-                scores_out = grow(2, resolution_log2 - 2)
+                output = grow(2, resolution_log2 - 2)
 
-        # # Label conditioning from "Which Training Methods for GANs do actually Converge?"
-        # if label_size:
-        #     with tf.variable_scope('LabelSwitch'):
-        #         scores_out = tf.reduce_sum(scores_out * labels_in, axis=1, keepdims=True)
-        assert scores_out.dtype == tf.as_dtype(dtype)
-        scores_out = tf.identity(scores_out, name='scores_out')
-        return scores_out
-
-        # output = tf.reshape(tf.layers.dense(input, 18*512), [18, 512])
-        # return output
-        pass
+        assert output.dtype == tf.as_dtype(dtype)
+        output = tf.identity(output, name='output')
+        return output
 
 
 class Generator(object):
@@ -144,7 +132,7 @@ class Generator(object):
             style_mixing_prob=None,
             randomize_noise=False,
             structure='fixed') # refer to function G_synthesis defined in ./stylegan/training/networks_stylegan.py for arguments
-        if not nchw: tf.transpose(output, perm=[0,2,3,1])
+        if not nchw: output = tf.transpose(output, perm=[0,2,3,1])
         return output
 
 
@@ -152,15 +140,118 @@ class Perceptor(object):
     def __init__(self, model):
         super(Perceptor, self).__init__()
         if model=='vgg16':
-            self.perceptual_model = tf.keras.applications.VGG16(weights='imagenet', include_top=False)
-            self.preprocess_input = tf.keras.applications.vgg16.preprocess_input
-        elif model=='vgg19':
-            self.perceptual_model = tf.keras.applications.VGG19(weights='imagenet', include_top=False)
-            self.preprocess_input = tf.keras.applications.vgg19.preprocess_input
+            self.vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
         else: raise ValueError('perceptor model {} not available for use'.format(model))
 
-    def build(self, input, layers):
-        assert isinstance(layers, list) or isinstance(layers, tuple)
-        extractor_models = [tf.keras.models.Model(inputs=self.perceptual_model.input, outputs=self.perceptual_model.layers[layer].output) for layer in layers]
-        output = [model.predict(self.preprocess_input(input)) for model in extractor_models]
+    def build(self, input):
+        self.vgg.build(input)
+        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2]
         return output
+
+
+
+# https://github.com/machrisaa/tensorflow-vgg/blob/master/vgg16.py
+VGG_MEAN = [103.939, 116.779, 123.68]
+class Vgg16:
+    def __init__(self, vgg16_npy_path):
+        self.data_dict = np.load(vgg16_npy_path, encoding='latin1', allow_pickle=True).item()
+
+    def build(self, rgb):
+        """
+        load variable from npy to build the VGG
+        :param rgb: rgb image [batch, height, width, 3] values scaled [0, 1]
+        """
+
+        rgb_scaled = rgb * 255.0
+
+        # Convert RGB to BGR
+        red, green, blue = tf.split(axis=3, num_or_size_splits=3, value=rgb_scaled)
+        assert red.get_shape().as_list()[1:] == [224, 224, 1]
+        assert green.get_shape().as_list()[1:] == [224, 224, 1]
+        assert blue.get_shape().as_list()[1:] == [224, 224, 1]
+        bgr = tf.concat(axis=3, values=[
+            blue - VGG_MEAN[0],
+            green - VGG_MEAN[1],
+            red - VGG_MEAN[2],
+        ])
+        assert bgr.get_shape().as_list()[1:] == [224, 224, 3]
+
+        self.conv1_1 = self.conv_layer(bgr, "conv1_1")
+        self.conv1_2 = self.conv_layer(self.conv1_1, "conv1_2")
+        self.pool1 = self.max_pool(self.conv1_2, 'pool1')
+
+        self.conv2_1 = self.conv_layer(self.pool1, "conv2_1")
+        self.conv2_2 = self.conv_layer(self.conv2_1, "conv2_2")
+        self.pool2 = self.max_pool(self.conv2_2, 'pool2')
+
+        self.conv3_1 = self.conv_layer(self.pool2, "conv3_1")
+        self.conv3_2 = self.conv_layer(self.conv3_1, "conv3_2")
+        self.conv3_3 = self.conv_layer(self.conv3_2, "conv3_3")
+        self.pool3 = self.max_pool(self.conv3_3, 'pool3')
+
+        self.conv4_1 = self.conv_layer(self.pool3, "conv4_1")
+        self.conv4_2 = self.conv_layer(self.conv4_1, "conv4_2")
+        self.conv4_3 = self.conv_layer(self.conv4_2, "conv4_3")
+        self.pool4 = self.max_pool(self.conv4_3, 'pool4')
+
+        self.conv5_1 = self.conv_layer(self.pool4, "conv5_1")
+        self.conv5_2 = self.conv_layer(self.conv5_1, "conv5_2")
+        self.conv5_3 = self.conv_layer(self.conv5_2, "conv5_3")
+        self.pool5 = self.max_pool(self.conv5_3, 'pool5')
+
+        self.fc6 = self.fc_layer(self.pool5, "fc6")
+        assert self.fc6.get_shape().as_list()[1:] == [4096]
+        self.relu6 = tf.nn.relu(self.fc6)
+
+        self.fc7 = self.fc_layer(self.relu6, "fc7")
+        self.relu7 = tf.nn.relu(self.fc7)
+
+        self.fc8 = self.fc_layer(self.relu7, "fc8")
+
+        self.prob = tf.nn.softmax(self.fc8, name="prob")
+
+        # self.data_dict = None
+
+    def avg_pool(self, bottom, name):
+        return tf.nn.avg_pool(bottom, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
+
+    def max_pool(self, bottom, name):
+        return tf.nn.max_pool(bottom, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME', name=name)
+
+    def conv_layer(self, bottom, name):
+        with tf.variable_scope(name):
+            filt = self.get_conv_filter(name)
+
+            conv = tf.nn.conv2d(bottom, filt, [1, 1, 1, 1], padding='SAME')
+
+            conv_biases = self.get_bias(name)
+            bias = tf.nn.bias_add(conv, conv_biases)
+
+            relu = tf.nn.relu(bias)
+            return relu
+
+    def fc_layer(self, bottom, name):
+        with tf.variable_scope(name):
+            shape = bottom.get_shape().as_list()
+            dim = 1
+            for d in shape[1:]:
+                dim *= d
+            x = tf.reshape(bottom, [-1, dim])
+
+            weights = self.get_fc_weight(name)
+            biases = self.get_bias(name)
+
+            # Fully connected layer. Note that the '+' operation automatically
+            # broadcasts the biases.
+            fc = tf.nn.bias_add(tf.matmul(x, weights), biases)
+
+            return fc
+
+    def get_conv_filter(self, name):
+        return tf.constant(self.data_dict[name][0], name="filter")
+
+    def get_bias(self, name):
+        return tf.constant(self.data_dict[name][1], name="biases")
+
+    def get_fc_weight(self, name):
+        return tf.constant(self.data_dict[name][0], name="weights")

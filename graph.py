@@ -10,39 +10,48 @@ class GraphEncodedStyleGAN(object):
         if not dataset.is_built: dataset.build(nchw=True)
         if not model.is_built: model.build(dataset.image)
 
-        # DEFINE BASIC VARIABLES
-        self.input_image = dataset.image
+        # DEFINE BASIC GRAPH VARIABLES
+        self.original_image = tf.clip_by_value(model.original_image, 0.0, 1.0)
         self.recovered_image = tf.clip_by_value(model.recovered_image, 0.0, 1.0)
+        self.learning_rate = tf.placeholder(tf.float32, shape=[], name='learning_rate')
 
         # DEFINE LOSS
-        self.perceptual_loss = None
-        self.mse_loss = None
-        mse = tf.keras.losses.MeanSquaredError()
-        for recovered, original in zip(model.perceptual_features):
-            self.perceptual_loss += mse(original, recovered)
-        self.mse_loss = mse(dataset.images, model.recovered_image)
-        self.total_loss = self.mse_loss + self.perceptual_loss
+        with tf.name_scope('loss'):
+            self.perceptual_loss = 0.0
+            self.mse_loss = 0.0
+            mse = tf.keras.losses.MeanSquaredError()
+            for original, recovered in zip(model.perceptual_features_original, model.perceptual_features_recovered):
+                self.perceptual_loss += 1e-3*mse(original, recovered)
+            self.mse_loss = mse(model.original_image, model.recovered_image)
+            self.total_loss = self.mse_loss + self.perceptual_loss
 
         # DEFINE METRICS
-        self.psnr = tf.image.psnr(dataset.images, model.recovered_image)
-        self.ssim = tf.image.ssim(dataset.images, model.recovered_image, 1.0)
+        with tf.name_scope('metric'):
+            self.psnr = tf.reduce_mean(tf.image.psnr(self.original_image, self.recovered_image, 1.0))
+            self.ssim = tf.reduce_mean(tf.image.ssim(self.original_image, self.recovered_image, 1.0))
 
         # DEFINE SUMMARIES
-        _ = tf.summary.scalar('mse_loss', self.mse_loss, family='loss')
-        _ = tf.summary.scalar('perceptual_loss', self.perceptual_loss, family='loss')
-        _ = tf.summary.scalar('psnr', self.psnr, family='metrics')
-        _ = tf.summary.scalar('ssim', self.ssim, family='metrics')
-        _ = tf.summary.image('original', dataset.images, max_outputs=1, family='images')
-        _ = tf.summary.image('recovered', self.recovered_image, max_outputs=1, family='images')
-        self.summary = tf.summary.merge_all()
+        with tf.name_scope('summary'):
+            _ = tf.summary.scalar('total_loss', self.total_loss, family='loss', collections=['SCALAR_SUMMARY'])
+            _ = tf.summary.scalar('mse_loss', self.mse_loss, family='loss', collections=['SCALAR_SUMMARY'])
+            _ = tf.summary.scalar('perceptual_loss', self.perceptual_loss, family='loss', collections=['SCALAR_SUMMARY'])
+            _ = tf.summary.scalar('psnr', self.psnr, family='metrics', collections=['SCALAR_SUMMARY'])
+            _ = tf.summary.scalar('ssim', self.ssim, family='metrics', collections=['SCALAR_SUMMARY'])
+            _ = tf.summary.image('original', self.original_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            _ = tf.summary.image('recovered', self.recovered_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            self.scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
+            self.image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
+            self.summary = tf.summary.merge_all()
 
         # DEFINE OPTIMIZERS
-        encoder_vars = tf.trainable_variabels('encoder')
-        optimizer = tf.train.AdamOptimizer(learning_rate=tf.get_variable('learning_rate', shape=[], dtype=tf.float32), name='optimizer')
-        gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
-        self.optimize = optimizer.apply_gradients(gv, name='optimize')
+        with tf.name_scope('optimize'):
+            encoder_vars = tf.trainable_variables('encoder')
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
+            gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
+            self.optimize = optimizer.apply_gradients(gv, name='optimize')
 
         # DEFINE SAVERS
-        self.saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
+        with tf.name_scope('save'):
+            self.saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
 
         self.is_built = True
