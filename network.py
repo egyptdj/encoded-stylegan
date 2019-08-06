@@ -8,14 +8,14 @@ class NetworkEncodedStyleGAN(object):
     def __init__(self, data_dir, minibatch_size, stylegan_model):
         super(NetworkEncodedStyleGAN, self).__init__()
         self.dataset = DatasetEncodedStyleGAN(data_dir, minibatch_size)
-        self.model = ModelEncodedStyleGAN(stylegan_model)
+        self.model = ModelEncodedStyleGAN(stylegan_model, self.dataset)
         self.graph = GraphEncodedStyleGAN()
         self.session = SessionEncodedStyleGAN()
         self.is_built = False
 
     def build(self):
         # self.dataset.build(nchw=True)
-        # self.model.build(self.dataset.image)
+        # self.model.build()
         self.graph.build(self.dataset, self.model)
         self.session.build(self.graph)
         self.is_built = True

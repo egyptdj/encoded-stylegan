@@ -4,19 +4,25 @@ from stylegan.training.networks_stylegan import *
 
 
 class ModelEncodedStyleGAN(object):
-    def __init__(self, stylegan_model):
+    def __init__(self, stylegan_model, dataset):
         super(ModelEncodedStyleGAN, self).__init__()
+        self.dataset = dataset
         self.generator = Generator(stylegan_model)
         self.encoder = Encoder()
         self.perceptor = Perceptor('vgg16')
         self.is_built = False
 
-    def build(self, input):
-        self.encoded_latent = self.encoder.build(input)
-        self.original_image = tf.transpose(input, perm=[0,2,3,1])
-        self.recovered_image = self.generator.build(self.encoded_latent)
+    def build(self):
+        self.input = tf.placeholder(tf.float32, self.dataset.image.shape)
+        self.searchlight = tf.Variable(initial_value=np.zeros([self.dataset.minibatch_size,18,512], dtype=float), trainable=True, name="searchlight", dtype=tf.float32)
+        self.reset_searchlight = self.searchlight.initializer
+        self.encoded_latent = self.encoder.build(self.input)
+        self.original_image = tf.transpose(self.input, perm=[0,2,3,1])
+        self.searchlight_recovered_image = self.generator.build(self.searchlight)
+        self.encoder_recovered_image = self.generator.build(self.encoded_latent)
         self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
-        self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
+        self.perceptual_features_searchlight_recovered = self.perceptor.build(tf.image.resize(self.searchlight_recovered_image, size=[224,224]))
+        self.perceptual_features_encoder_recovered = self.perceptor.build(tf.image.resize(self.encoder_recovered_image, size=[224,224]))
         self.is_built = True
 
 
