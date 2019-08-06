@@ -1,18 +1,20 @@
+import os
+import PIL.Image
+import numpy as np
 import tensorflow as tf
-from stylegan.training import dataset
 
 
 class DatasetEncodedStyleGAN(object):
-    def __init__(self, data_dir, minibatch_size):
+    def __init__(self, data_dir):
         super(DatasetEncodedStyleGAN, self).__init__()
         self.data_dir = data_dir
-        self.minibatch_size = minibatch_size
-        self.dataset = dataset.load_dataset(data_dir=self.data_dir, tfrecord_dir='ffhq', verbose=False)
-        self.dataset.configure(self.minibatch_size)
+        self.image_list = [image for image in os.listdir(self.data_dir) if image.endswith("png")]
+        assert len(self.image_list)>0
         self.is_built = False
 
     def build(self, uint=False, nchw=False):
-        self.image, self.labels = self.dataset.get_minibatch_tf()
+        im = np.array(PIL.Image.open(self.data_dir+"/"+self.image_list[1]))[np.newaxis,...]
+        self.image = tf.image.resize(tf.constant(im), [1024,1024])
         if not uint: self.image = tf.cast(self.image, tf.float32)/255.0
-        if not nchw: self.image = tf.transpose(self.image, perm=[0,2,3,1])
+        if nchw: self.image = tf.transpose(self.image, perm=[0,3,1,2])
         self.is_built = True

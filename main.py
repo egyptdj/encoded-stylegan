@@ -28,7 +28,6 @@ class EncodedStyleGAN(object):
 
         self.network = NetworkEncodedStyleGAN(
             data_dir = self.base_option['data_dir'],
-            minibatch_size = self.base_option['minibatch_size'],
             stylegan_model=Gs.components.synthesis)
 
         self.network.build()

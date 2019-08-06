@@ -7,8 +7,9 @@ class GraphEncodedStyleGAN(object):
         self.is_built = False
 
     def build(self, dataset, model):
-        if not dataset.is_built: dataset.build(nchw=True)
+        if not dataset.is_built: dataset.build(nchw=False)
         if not model.is_built: model.build(dataset.image)
+        self.model = model
 
         # DEFINE BASIC GRAPH VARIABLES
         self.original_image = tf.clip_by_value(model.original_image, 0.0, 1.0)
@@ -45,13 +46,8 @@ class GraphEncodedStyleGAN(object):
 
         # DEFINE OPTIMIZERS
         with tf.name_scope('optimize'):
-            encoder_vars = tf.trainable_variables('encoder')
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
-            gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
+            gv = optimizer.compute_gradients(loss=self.total_loss, var_list=[model.searchlight])
             self.optimize = optimizer.apply_gradients(gv, name='optimize')
-
-        # DEFINE SAVERS
-        with tf.name_scope('save'):
-            self.saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
 
         self.is_built = True
