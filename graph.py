@@ -21,7 +21,7 @@ class GraphEncodedStyleGAN(object):
             self.mse_loss = 0.0
             mse = tf.keras.losses.MeanSquaredError()
             for original, recovered in zip(model.perceptual_features_original, model.perceptual_features_recovered):
-                self.perceptual_loss += 1e-3*mse(original, recovered)
+                self.perceptual_loss += mse(original, recovered)
             self.mse_loss = mse(model.original_image, model.recovered_image)
             self.total_loss = self.mse_loss + self.perceptual_loss
 
@@ -46,7 +46,6 @@ class GraphEncodedStyleGAN(object):
         # DEFINE OPTIMIZERS
         with tf.name_scope('optimize'):
             encoder_vars = tf.trainable_variables('encoder')
-            print(encoder_vars)
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
             gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
             self.optimize = optimizer.apply_gradients(gv, name='optimize')
