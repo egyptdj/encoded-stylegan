@@ -439,6 +439,7 @@ def G_mapping(
 
 def G_synthesis(
     dlatents_in,                        # Input: Disentangled latents (W) [minibatch, num_layers, dlatent_size].
+    noise_inputs,
     dlatent_size        = 512,          # Disentangled latent (W) dimensionality.
     num_channels        = 3,            # Number of output color channels.
     resolution          = 1024,         # Output resolution.
@@ -479,12 +480,13 @@ def G_synthesis(
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0), trainable=False), dtype)
 
     # Noise inputs.
-    noise_inputs = []
-    if use_noise:
-        for layer_idx in range(num_layers):
-            res = layer_idx // 2 + 2
-            shape = [1, use_noise, 2**res, 2**res]
-            noise_inputs.append(tf.get_variable('noise%d' % layer_idx, shape=shape, initializer=tf.initializers.random_normal(), trainable=False))
+    if noise_inputs is None:
+        noise_inputs = []
+        if use_noise:
+            for layer_idx in range(num_layers):
+                res = layer_idx // 2 + 2
+                shape = [1, use_noise, 2**res, 2**res]
+                noise_inputs.append(tf.get_variable('noise%d' % layer_idx, shape=shape, initializer=tf.initializers.random_normal(), trainable=False))
 
     # Things to do at the end of each layer.
     def layer_epilogue(x, layer_idx):

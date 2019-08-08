@@ -12,7 +12,7 @@ class ModelEncodedStyleGAN(object):
         self.is_built = False
 
     def build(self, input):
-        self.encoded_latent = self.encoder.build(input)
+        self.encoded_latent, self.encoded_noise = self.encoder.build(input)
         self.original_image = tf.transpose(input, perm=[0,2,3,1])
         self.recovered_image = self.generator.build(self.encoded_latent)
         self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
@@ -51,18 +51,20 @@ class Encoder(object):
         def blur(x): return blur2d(x, blur_filter) if blur_filter else x
         if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
         act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
-        out_fmap = np.prod(out_shape)
 
         input.set_shape([None, num_channels, resolution, resolution])
         input = tf.cast(input, dtype)
         lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
         output = None
+        noise = None
+
+        noise_shape = [[1,True,2**(layer_idx//2+2),2**(layer_idx//2+2)] for layer_idx in range(18)]
 
         # Building blocks.
         def fromrgb(x, res): # res = 2..resolution_log2
             with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
                 return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
-        def block(x, res): # res = 2..resolution_log2
+        def block(x, res, noise=False): # res = 2..resolution_log2
             with tf.variable_scope('%dx%d' % (2**res, 2**res)):
                 if res >= 3: # 8x8 and up
                     with tf.variable_scope('Conv0'):
@@ -70,15 +72,24 @@ class Encoder(object):
                     with tf.variable_scope('Conv1_down'):
                         x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
                 else: # 4x4
+                    if noise: scope_suffix = '_noise'
+                    else: scope_suffix = ''
                     if mbstd_group_size > 1:
                         x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
-                    with tf.variable_scope('Conv'):
+                    with tf.variable_scope('Conv'+scope_suffix):
                         x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense0'):
+                    with tf.variable_scope('Dense0'+scope_suffix):
                         x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense1'):
-                        x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
-                        x = tf.reshape(x, [-1]+out_shape)
+                    if not noise:
+                        with tf.variable_scope('Dense1'+scope_suffix):
+                            x = apply_bias(dense(x, fmaps=np.prod(out_shape), gain=1, use_wscale=use_wscale))
+                            x = tf.reshape(x, [-1]+out_shape)
+                    else:
+                        x_list = []
+                        for idx, shape in enumerate(noise_shape):
+                            with tf.variable_scope('Dense1'+scope_suffix+str(idx)):
+                                x_list.append(tf.reshape(apply_bias(dense(x, fmaps=np.prod(shape), gain=1, use_wscale=use_wscale)), [-1]+shape))
+                        x = x_list
                 return x
 
         # Fixed structure: simple and efficient, but does not support progressive growing.
@@ -88,6 +99,7 @@ class Encoder(object):
                 for res in range(resolution_log2, 2, -1):
                     x = block(x, res)
                 output = block(x, 2)
+                noise = block(x, 2, True)
 
         # Linear structure: simple but inefficient.
         if structure == 'linear':
@@ -102,6 +114,7 @@ class Encoder(object):
                     with tf.variable_scope('Grow_lod%d' % lod):
                         x = tflib.lerp_clip(x, y, lod_in - lod)
                 output = block(x, 2)
+                noise = block(x, 2, True)
 
         # Recursive structure: complex but efficient.
         if structure == 'recursive':
@@ -115,10 +128,11 @@ class Encoder(object):
                     if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(input, 2**(lod+1)), res - 1), lod_in - lod))
                     return y()
                 output = grow(2, resolution_log2 - 2)
+                noise = block(x, 2, True)
 
         assert output.dtype == tf.as_dtype(dtype)
         output = tf.identity(output, name='output')
-        return output
+        return output, noise
 
 
 class Generator(object):
@@ -126,8 +140,9 @@ class Generator(object):
         super(Generator, self).__init__()
         self.stylegan_model = stylegan_model
 
-    def build(self, input, nchw=False):
+    def build(self, input, noise=None, nchw=False):
         output = self.stylegan_model.get_output_for(input,
+            noise_inputs=noise,
             is_validation=True,
             style_mixing_prob=None,
             randomize_noise=False,
