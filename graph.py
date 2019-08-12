@@ -23,7 +23,8 @@ class GraphEncodedStyleGAN(object):
             for original, recovered in zip(model.perceptual_features_original, model.perceptual_features_recovered):
                 self.perceptual_loss += mse(original, recovered)
             self.mse_loss = mse(model.original_image, model.recovered_image)
-            self.total_loss = self.mse_loss + self.perceptual_loss
+            self.mse_lambda = tf.Variable(initial_value=1.0, trainable=False, dtype=tf.float32, shape=[], name='mse_lambda')
+            self.total_loss = self.mse_lambda * self.mse_loss + self.perceptual_loss
 
         # DEFINE METRICS
         with tf.name_scope('metric'):
