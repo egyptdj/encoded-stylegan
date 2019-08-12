@@ -14,6 +14,7 @@ class GraphEncodedStyleGAN(object):
         self.original_image = tf.clip_by_value(model.original_image, 0.0, 1.0)
         self.recovered_image = tf.clip_by_value(model.recovered_image, 0.0, 1.0)
         self.learning_rate = tf.placeholder(tf.float32, shape=[], name='learning_rate')
+        self.noise_vars = [v for v in tf.global_variables() if 'G_synthesis/noise' in v.name]
 
         # DEFINE LOSS
         with tf.name_scope('loss'):
@@ -45,10 +46,12 @@ class GraphEncodedStyleGAN(object):
 
         # DEFINE OPTIMIZERS
         with tf.name_scope('optimize'):
-            encoder_vars = tf.trainable_variables('encoder')
+            encoder_tvars = tf.trainable_variables('encoder')
+            noise_tvars = tf.trainable_variables('noise_')
             optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
-            gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
-            self.optimize = optimizer.apply_gradients(gv, name='optimize')
+            gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_tvars+noise_tvars)
+            with tf.control_dependencies([noise_var.assign(noise) for noise_var, noise in zip(self.noise_vars, model.encoded_noise)]):
+                self.optimize = optimizer.apply_gradients(gv, name='optimize')
 
         # DEFINE SAVERS
         with tf.name_scope('save'):

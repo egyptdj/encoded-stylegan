@@ -25,7 +25,7 @@ class SessionEncodedStyleGAN(object):
         tflib.tfutil.init_uninitialized_vars()
         summary_writer = tf.summary.FileWriter(result_dir+'/summary')
         for iter in range(num_iter):
-            if iter%1000==0 and not iter==0: learning_rate *= 0.98
+            if iter%10000==0 and not iter==0: learning_rate *= 0.98
             _, scalar_summary, total_loss, mse_loss, perceptual_loss, psnr, ssim = sess.run(self.train_op, {self.learning_rate: learning_rate})
             summary_writer.add_summary(scalar_summary, iter)
             if iter%save_iter==0:
