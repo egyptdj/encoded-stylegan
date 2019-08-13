@@ -11,10 +11,12 @@ class ModelEncodedStyleGAN(object):
         self.perceptor = Perceptor('vgg16')
         self.is_built = False
 
-    def build(self, input):
+    def build(self, input, test_input):
         self.encoded_latent = self.encoder.build(input)
-        self.original_image = tf.transpose(input, perm=[0,2,3,1])
         self.recovered_image = self.generator.build(self.encoded_latent)
+        self.original_image = tf.transpose(input, perm=[0,2,3,1])
+        self.recovered_test_image = self.generator.build(self.encoder.build(test_input))
+        self.original_test_image = tf.transpose(test_input, perm=[0,2,3,1])
         self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
         self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
         self.is_built = True
@@ -145,7 +147,7 @@ class Perceptor(object):
 
     def build(self, input):
         self.vgg.build(input)
-        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2]
+        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2, self.vgg.conv5_1, self.vgg.conv5_2, self.vgg.conv5_3]
         return output
 
 

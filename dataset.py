@@ -13,6 +13,8 @@ class DatasetEncodedStyleGAN(object):
 
     def build(self, uint=False, nchw=False):
         self.image, self.labels = self.dataset.get_minibatch_tf()
+        self.test_image = tf.Variable(initial_value=np.zeros([1,3,1024,1024], dtype=float), shape=[1,3,1024,1024], dtype=tf.float32, name='test_image')
+        tf.add_to_collection("TEST_OPS", self.test_image)
         if not uint: self.image = tf.cast(self.image, tf.float32)/255.0
         if not nchw: self.image = tf.transpose(self.image, perm=[0,2,3,1])
         self.is_built = True

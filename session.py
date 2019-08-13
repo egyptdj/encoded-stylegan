@@ -11,14 +11,13 @@ class SessionEncodedStyleGAN(object):
     def build(self, graph):
         assert graph.is_built
         self.graph = graph
-        self.train_op = [graph.optimize, graph.scalar_summary, graph.total_loss, graph.mse_loss, graph.perceptual_loss, graph.psnr, graph.ssim]
-        self.test_op = [graph.summary, graph.total_loss, graph.mse_loss, graph.perceptual_loss, graph.psnr, graph.ssim]
+        self.train_op = [graph.optimize, graph.scalar_summary, graph.total_loss, graph.psnr, graph.ssim]
+        self.test_op = [graph.summary, graph.total_loss, graph.psnr, graph.ssim]
         self.recover_image_op = [graph.recovered_image]
         self.original_image_op = [graph.original_image]
         self.image_summary = graph.image_summary
         self.learning_rate = graph.learning_rate
         self.saver = graph.saver
-        self.mse_lambda_increment = graph.mse_lambda.assign(graph.mse_lambda*5)
         self.is_built = True
 
     def train(self, learning_rate, num_iter, save_iter, result_dir):
@@ -28,7 +27,6 @@ class SessionEncodedStyleGAN(object):
         for iter in range(num_iter):
             if iter%10000==0 and iter!=0:
                 learning_rate *= 0.98
-                sess.run(self.mse_lambda_increment)
             _, scalar_summary, total_loss, mse_loss, perceptual_loss, psnr, ssim = sess.run(self.train_op, {self.learning_rate: learning_rate})
             summary_writer.add_summary(scalar_summary, iter)
             if iter%save_iter==0:
