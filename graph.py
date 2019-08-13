@@ -8,7 +8,7 @@ class GraphEncodedStyleGAN(object):
 
     def build(self, dataset, model):
         if not dataset.is_built: dataset.build(nchw=True)
-        if not model.is_built: model.build(dataset.image)
+        if not model.is_built: model.build(dataset.image, dataset.test_image)
 
         # DEFINE BASIC GRAPH VARIABLES
         self.original_image = tf.clip_by_value(model.original_image, 0.0, 1.0)

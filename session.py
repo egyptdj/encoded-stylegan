@@ -27,10 +27,11 @@ class SessionEncodedStyleGAN(object):
         for iter in range(num_iter):
             if iter%10000==0 and iter!=0:
                 learning_rate *= 0.98
-            _, scalar_summary, total_loss, mse_loss, perceptual_loss, psnr, ssim = sess.run(self.train_op, {self.learning_rate: learning_rate})
+            _, scalar_summary, total_loss, psnr, ssim = sess.run(self.train_op, {self.learning_rate: learning_rate})
             summary_writer.add_summary(scalar_summary, iter)
             if iter%save_iter==0:
-                print('iter {:7d} | total {:.4f} | mse {:.4f} | percep {:.4f} | psnr {:.4f} ssim {:.4f}'.format(iter, total_loss, mse_loss, perceptual_loss, psnr, ssim))
+                pl0, pl1, pl2, pl3, pl4, pl5, pl6 = sess.run(self.graph.perceptual_loss)
+                print('iter {:7d} | {:.4f} | {:.4f} {:.4f} | {:.4f} | {:.4f} {:.4f} | {:.4f}'.format(iter, pl0, pl1, pl2, pl3, pl4, pl5, pl6))
                 image_summary = sess.run(self.image_summary)
                 summary_writer.add_summary(image_summary, iter)
                 self.saver.save(sess, result_dir+'/model/encoded_stylegan.ckpt')

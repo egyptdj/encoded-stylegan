@@ -15,10 +15,10 @@ class ModelEncodedStyleGAN(object):
         self.encoded_latent = self.encoder.build(input)
         self.recovered_image = self.generator.build(self.encoded_latent)
         self.original_image = tf.transpose(input, perm=[0,2,3,1])
-        self.recovered_test_image = self.generator.build(self.encoder.build(test_input))
-        self.original_test_image = tf.transpose(test_input, perm=[0,2,3,1])
         self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
         self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
+        self.recovered_test_image = self.generator.build(self.encoder.build(test_input, reuse=True))
+        self.original_test_image = tf.transpose(test_input, perm=[0,2,3,1])
         self.is_built = True
 
 
@@ -29,6 +29,7 @@ class Encoder(object):
     def build(self,
         input,                              # First input: Images [minibatch, channel, height, width].
         out_shape           = [18, 512],
+        reuse               = False,
         num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
         resolution          = 1024,           # Input resolution. Overridden based on dataset.
         label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
@@ -55,71 +56,42 @@ class Encoder(object):
         act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
         out_fmap = np.prod(out_shape)
 
-        input.set_shape([None, num_channels, resolution, resolution])
-        input = tf.cast(input, dtype)
-        lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
-        output = None
+        with tf.variable_scope('encoder', reuse=reuse):
+            input.set_shape([None, num_channels, resolution, resolution])
+            input = tf.cast(input, dtype)
+            lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
+            output = None
 
-        # Building blocks.
-        def fromrgb(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
-                return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
-        def block(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('%dx%d' % (2**res, 2**res)):
-                if res >= 3: # 8x8 and up
-                    with tf.variable_scope('Conv0'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Conv1_down'):
-                        x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
-                else: # 4x4
-                    if mbstd_group_size > 1:
-                        x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
-                    with tf.variable_scope('Conv'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense0'):
-                        x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense1'):
-                        x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
-                        x = tf.reshape(x, [-1]+out_shape)
-                return x
+            # Building blocks.
+            def fromrgb(x, res): # res = 2..resolution_log2
+                with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
+                    return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
+            def block(x, res): # res = 2..resolution_log2
+                with tf.variable_scope('%dx%d' % (2**res, 2**res)):
+                    if res >= 3: # 8x8 and up
+                        with tf.variable_scope('Conv0'):
+                            x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                        with tf.variable_scope('Conv1_down'):
+                            x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
+                    else: # 4x4
+                        if mbstd_group_size > 1:
+                            x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
+                        with tf.variable_scope('Conv'):
+                            x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                        with tf.variable_scope('Dense0'):
+                            x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
+                        with tf.variable_scope('Dense1'):
+                            x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
+                            x = tf.reshape(x, [-1]+out_shape)
+                    return x
 
-        # Fixed structure: simple and efficient, but does not support progressive growing.
-        if structure == 'fixed':
-            with tf.variable_scope('encoder'):
-                x = fromrgb(input, resolution_log2)
-                for res in range(resolution_log2, 2, -1):
-                    x = block(x, res)
-                output = block(x, 2)
+            x = fromrgb(input, resolution_log2)
+            for res in range(resolution_log2, 2, -1):
+                x = block(x, res)
+            output = block(x, 2)
 
-        # Linear structure: simple but inefficient.
-        if structure == 'linear':
-            with tf.variable_scope('encoder'):
-                img = input
-                x = fromrgb(img, resolution_log2)
-                for res in range(resolution_log2, 2, -1):
-                    lod = resolution_log2 - res
-                    x = block(x, res)
-                    img = downscale2d(img)
-                    y = fromrgb(img, res - 1)
-                    with tf.variable_scope('Grow_lod%d' % lod):
-                        x = tflib.lerp_clip(x, y, lod_in - lod)
-                output = block(x, 2)
-
-        # Recursive structure: complex but efficient.
-        if structure == 'recursive':
-            with tf.variable_scope('encoder'):
-                def cset(cur_lambda, new_cond, new_lambda):
-                    return lambda: tf.cond(new_cond, new_lambda, cur_lambda)
-                def grow(res, lod):
-                    x = lambda: fromrgb(downscale2d(input, 2**lod), res)
-                    if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
-                    x = block(x(), res); y = lambda: x
-                    if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(input, 2**(lod+1)), res - 1), lod_in - lod))
-                    return y()
-                output = grow(2, resolution_log2 - 2)
-
-        assert output.dtype == tf.as_dtype(dtype)
-        output = tf.identity(output, name='output')
+            assert output.dtype == tf.as_dtype(dtype)
+            output = tf.identity(output, name='output')
         return output
 
 

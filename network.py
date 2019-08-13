@@ -5,9 +5,9 @@ from session import *
 
 
 class NetworkEncodedStyleGAN(object):
-    def __init__(self, data_dir, minibatch_size, stylegan_model):
+    def __init__(self, data_dir, testim_dir, minibatch_size, stylegan_model):
         super(NetworkEncodedStyleGAN, self).__init__()
-        self.dataset = DatasetEncodedStyleGAN(data_dir, minibatch_size)
+        self.dataset = DatasetEncodedStyleGAN(data_dir, testim_dir, minibatch_size)
         self.model = ModelEncodedStyleGAN(stylegan_model)
         self.graph = GraphEncodedStyleGAN()
         self.session = SessionEncodedStyleGAN()
@@ -15,7 +15,7 @@ class NetworkEncodedStyleGAN(object):
 
     def build(self):
         # self.dataset.build(nchw=True)
-        # self.model.build(self.dataset.image)
+        # self.model.build(self.dataset.image, self.dataset.test_image)
         self.graph.build(self.dataset, self.model)
         self.session.build(self.graph)
         self.is_built = True
