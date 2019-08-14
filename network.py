@@ -14,8 +14,8 @@ class NetworkEncodedStyleGAN(object):
         self.is_built = False
 
     def build(self):
-        # self.dataset.build(nchw=True)
-        # self.model.build(self.dataset.image, self.dataset.test_image)
+        self.dataset.build(nchw=True)
+        self.model.build(self.dataset.image, self.dataset.test_image)
         self.graph.build(self.dataset, self.model)
         self.session.build(self.graph)
         self.is_built = True

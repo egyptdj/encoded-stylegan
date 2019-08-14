@@ -119,7 +119,7 @@ class Perceptor(object):
 
     def build(self, input):
         self.vgg.build(input)
-        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2, self.vgg.conv5_1, self.vgg.conv5_2, self.vgg.conv5_3]
+        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2]
         return output
 
 

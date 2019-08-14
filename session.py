@@ -11,30 +11,25 @@ class SessionEncodedStyleGAN(object):
     def build(self, graph):
         assert graph.is_built
         self.graph = graph
-        self.train_op = [graph.optimize, graph.scalar_summary, graph.total_loss, graph.psnr, graph.ssim]
-        self.test_op = [graph.summary, graph.total_loss, graph.psnr, graph.ssim]
-        self.recover_image_op = [graph.recovered_image]
-        self.original_image_op = [graph.original_image]
-        self.image_summary = graph.image_summary
-        self.learning_rate = graph.learning_rate
-        self.saver = graph.saver
         self.is_built = True
 
     def train(self, learning_rate, num_iter, save_iter, result_dir):
         sess = tf.get_default_session()
         tflib.tfutil.init_uninitialized_vars()
-        summary_writer = tf.summary.FileWriter(result_dir+'/summary')
+        train_summary_writer = tf.summary.FileWriter(result_dir+'/summary/train')
+        val_summary_writer = tf.summary.FileWriter(result_dir+'/summary/validation')
+        original_image_summary = sess.run(self.graph.test_original_image_summary)
+        val_summary_writer.add_summary(original_image_summary)
         for iter in range(num_iter):
-            if iter%10000==0 and iter!=0:
-                learning_rate *= 0.98
-            _, scalar_summary, total_loss, psnr, ssim = sess.run(self.train_op, {self.learning_rate: learning_rate})
-            summary_writer.add_summary(scalar_summary, iter)
-            if iter%save_iter==0:
-                pl0, pl1, pl2, pl3, pl4, pl5, pl6 = sess.run(self.graph.perceptual_loss)
-                print('iter {:7d} | {:.4f} | {:.4f} {:.4f} | {:.4f} | {:.4f} {:.4f} | {:.4f}'.format(iter, pl0, pl1, pl2, pl3, pl4, pl5, pl6))
-                image_summary = sess.run(self.image_summary)
-                summary_writer.add_summary(image_summary, iter)
-                self.saver.save(sess, result_dir+'/model/encoded_stylegan.ckpt')
-        image_summary = sess.run(self.image_summary)
-        summary_writer.add_summary(image_summary, iter)
-        self.saver.save(sess, result_dir+'/model/encoded_stylegan.ckpt')
+            _, scalar_summary = sess.run([self.graph.optimize, self.graph.scalar_summary], {self.graph.learning_rate: learning_rate})
+            train_summary_writer.add_summary(scalar_summary, iter)
+            if iter%save_iter==0: self.graph.saver.save(sess, result_dir+'/model/encoded_stylegan.ckpt') # save model
+            if iter%10000==0 and iter!=0: learning_rate *= 0.98 # decay learning rate
+            if iter%1000==0: # print/add summary
+                train_image_summary, test_image_summary = sess.run(self.train_image_summary+self.test_recovered_image_summary)
+                train_summary_writer.add_summary(train_image_summary, iter)
+                val_summary_writer.add_summary(test_image_summary, iter)
+        train_image_summary, test_image_summary = sess.run(self.train_image_summary+self.test_recovered_image_summary)
+        train_summary_writer.add_summary(train_image_summary, iter)
+        val_summary_writer.add_summary(test_image_summary, iter)
+        self.graph.saver.save(sess, result_dir+'/model/encoded_stylegan.ckpt')

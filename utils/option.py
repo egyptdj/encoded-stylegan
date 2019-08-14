@@ -9,7 +9,7 @@ def parse():
     parser.add_argument('-l', '--learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
     parser.add_argument('-nE', '--exp_name', type=str, default='exp', help='experiment name')
     parser.add_argument('-dD', '--data_dir', type=str, default='/media/bispl/workdisk/FFHQ_flickrface/tfrecords', help='directory path to load dataset')
-    parser.add_argument('-dT', '--testim_dir', type=str, default='/home/bispl/Documents', help='directory path to load dataset')
+    parser.add_argument('-dT', '--testim_dir', type=str, default='/home/bispl/Documents/encoded_stylegan/test_image', help='directory path to load dataset')
     parser.add_argument('-dR', '--result_dir', type=str, default='results', help='directory path to save the trained model and/or the resulting image')
     parser.add_argument('-dC', '--cache_dir', type=str, default='cache', help='directory path to save cache files')
     parser.add_argument('-iN', '--num_iter', type=int, default=1000000, help='total number of iterations to train')

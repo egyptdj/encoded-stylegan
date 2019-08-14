@@ -41,12 +41,16 @@ class GraphEncodedStyleGAN(object):
             _ = [tf.summary.scalar('perceptual_loss_{}'.format(idx), percep_loss, family='loss', collections=['SCALAR_SUMMARY']) for idx, percep_loss in enumerate(self.perceptual_loss)]
             _ = tf.summary.scalar('psnr', self.psnr, family='metrics', collections=['SCALAR_SUMMARY'])
             _ = tf.summary.scalar('ssim', self.ssim, family='metrics', collections=['SCALAR_SUMMARY'])
-            _ = tf.summary.image('train_original', self.original_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
-            _ = tf.summary.image('train_recovered', self.recovered_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
-            _ = tf.summary.image('test_original', self.original_test_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
-            _ = tf.summary.image('test_recovered', self.recovered_test_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            _ = tf.summary.image('train_original', self.original_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY', 'TRAIN_IMAGE_SUMMARY'])
+            _ = tf.summary.image('train_recovered', self.recovered_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY', 'TRAIN_IMAGE_SUMMARY'])
+            _ = tf.summary.image('test_original', self.original_test_image, max_outputs=64, family='images', collections=['IMAGE_SUMMARY', 'TEST_IMAGE_SUMMARY', 'ORIGINAL_IMAGE_SUMMARY'])
+            _ = tf.summary.image('test_recovered', self.recovered_test_image, max_outputs=64, family='images', collections=['IMAGE_SUMMARY', 'TEST_IMAGE_SUMMARY', 'RECOVERED_IMAGE_SUMMARY'])
             self.scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
             self.image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
+            self.train_image_summary = tf.summary.merge(tf.get_collection('TRAIN_IMAGE_SUMMARY'))
+            self.test_image_summary = tf.summary.merge(tf.get_collection('TEST_IMAGE_SUMMARY'))
+            self.test_original_image_summary = tf.summary.merge(tf.get_collection('ORIGINAL_IMAGE_SUMMARY'))
+            self.test_recovered_image_summary = tf.summary.merge(tf.get_collection('RECOVERED_IMAGE_SUMMARY'))
             self.summary = tf.summary.merge_all()
 
         # DEFINE OPTIMIZERS
