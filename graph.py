@@ -56,7 +56,7 @@ class GraphEncodedStyleGAN(object):
         # DEFINE OPTIMIZERS
         with tf.name_scope('optimize'):
             encoder_vars = tf.trainable_variables('encoder')
-            optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
+            optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, name='optimizer')
             gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
             self.optimize = optimizer.apply_gradients(gv, name='optimize')
 
