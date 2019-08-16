@@ -27,10 +27,9 @@ class EncodedStyleGAN(object):
         #     _, _, Gs = pickle.load(f)
 
         self.network = NetworkEncodedStyleGAN(
-            data_dir = self.base_option['data_dir'],
-            testim_dir = self.base_option['testim_dir'],
+            # testim_dir = self.base_option['testim_dir'],
             minibatch_size = self.base_option['minibatch_size'],
-            stylegan_model=Gs.components.synthesis)
+            stylegan_model=Gs)
 
         self.network.build()
         self.is_initialized = True

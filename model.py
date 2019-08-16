@@ -4,21 +4,29 @@ from stylegan.training.networks_stylegan import *
 
 
 class ModelEncodedStyleGAN(object):
-    def __init__(self, stylegan_model):
+    def __init__(self, stylegan_model, minibatch_size):
         super(ModelEncodedStyleGAN, self).__init__()
+        self.minibatch_size = minibatch_size
+        self.mapper = Mapper(stylegan_model)
         self.generator = Generator(stylegan_model)
         self.encoder = Encoder()
         self.perceptor = Perceptor('vgg16')
         self.is_built = False
 
-    def build(self, input, test_input):
-        self.encoded_latent = self.encoder.build(input)
-        self.recovered_image = self.generator.build(self.encoded_latent)
-        self.original_image = tf.transpose(input, perm=[0,2,3,1])
-        self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
-        self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
-        self.recovered_test_image = self.generator.build(self.encoder.build(test_input, reuse=True))
-        self.original_test_image = tf.transpose(test_input, perm=[0,2,3,1])
+    def build(self):
+        with tf.name_scope('placeholders'):
+            self.input_image = tf.placeholder(tf.float32, shape=[None,3,1024,1024], name='input_image')
+            self.input_latent = tf.placeholder(tf.float32, shape=[None,18,512], name='input_latent')
+
+        self.random_latent = self.mapper.build(tf.random.normal([self.minibatch_size,512]))
+        self.generator_output = self.generator.build(self.random_latent, nchw=True)
+        self.encoded_latent = self.encoder.build(self.generator_output)
+        self.encoded_latent_recovered = self.generator.build(self.encoded_latent)
+
+        # self.recovered_image = self.generator.build(self.input_latent)
+        self.original_image = tf.transpose(self.generator_output, perm=[0,2,3,1])
+        self.perceptual_features_original = self.perceptor.build(tf.image.resize(tf.transpose(self.generator_output, perm=[0,2,3,1]), size=[224,224]))
+        self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.encoded_latent_recovered, size=[224,224]))
         self.is_built = True
 
 
@@ -95,17 +103,43 @@ class Encoder(object):
         return output
 
 
+class Mapper(object):
+    def __init__(self, stylegan_model):
+        super(Mapper, self).__init__()
+        self.stylegan_mapper = stylegan_model.components.mapping
+        self.stylegan_mapper.num_inputs = 1
+
+    def build(self, input):
+        output = self.stylegan_mapper.get_output_for(
+            input,                             # First input: Latent vectors (Z) [minibatch, latent_size].
+            labels_in               = tf.zeros([1,0]),                              # Second input: Conditioning labels [minibatch, label_size].
+            latent_size             = 512,          # Latent vector (Z) dimensionality.
+            label_size              = 0,            # Label dimensionality, 0 if no labels.
+            # dlatent_size            = 512,          # Disentangled latent (W) dimensionality.
+            # dlatent_broadcast       = None,         # Output disentangled latent (W) as [minibatch, dlatent_size] or [minibatch, dlatent_broadcast, dlatent_size].
+            # mapping_layers          = 8,            # Number of mapping layers.
+            # mapping_fmaps           = 512,          # Number of activations in the mapping layers.
+            # mapping_lrmul           = 0.01,         # Learning rate multiplier for the mapping layers.
+            # mapping_nonlinearity    = 'lrelu',      # Activation function: 'relu', 'lrelu'.
+            # use_wscale              = True,         # Enable equalized learning rate?
+            # normalize_latents       = True,         # Normalize latent vectors (Z) before feeding them to the mapping layers?
+            dtype                   = 'float32'
+        )
+        return output
+
+
 class Generator(object):
     def __init__(self, stylegan_model):
         super(Generator, self).__init__()
-        self.stylegan_model = stylegan_model
+        self.stylegan_generator = stylegan_model.components.synthesis
 
     def build(self, input, nchw=False):
-        output = self.stylegan_model.get_output_for(input,
+        output = self.stylegan_generator.get_output_for(
+            input,
             is_validation=True,
             style_mixing_prob=None,
-            randomize_noise=False,
-            structure='fixed') # refer to function G_synthesis defined in ./stylegan/training/networks_stylegan.py for arguments
+            randomize_noise=True,
+            structure='auto') # refer to function G_synthesis defined in ./stylegan/training/networks_stylegan.py for arguments
         if not nchw: output = tf.transpose(output, perm=[0,2,3,1])
         return output
 
