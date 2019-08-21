@@ -28,6 +28,7 @@ class EncodedStyleGAN(object):
 
         self.network = NetworkEncodedStyleGAN(
             data_dir = self.base_option['data_dir'],
+            idx = self.base_option['image_idx'],
             stylegan_model=Gs.components.synthesis)
 
         self.network.build()

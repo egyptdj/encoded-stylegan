@@ -38,7 +38,7 @@ class Perceptor(object):
     def __init__(self, model):
         super(Perceptor, self).__init__()
         if model=='vgg16':
-            self.vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+            self.vgg = Vgg16('D:/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
         else: raise ValueError('perceptor model {} not available for use'.format(model))
 
     def build(self, input):
