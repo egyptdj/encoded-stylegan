@@ -1,3 +1,4 @@
+
 import os
 import sys
 import utils
@@ -188,21 +189,7 @@ class Vgg16:
         return tf.constant(self.data_dict[name][0], name="weights")
 
 
-class Perceptor(object):
-    def __init__(self, model):
-        super(Perceptor, self).__init__()
-        if model=='vgg16':
-            self.vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
-        else: raise ValueError('perceptor model {} not available for use'.format(model))
-
-    def build(self, input):
-        self.vgg.build(input)
-        output = [self.vgg.conv1_1, self.vgg.conv1_2, self.vgg.conv3_2, self.vgg.conv4_2]
-        return output
-
-
-
-if __name__=='__main__':
+def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
@@ -231,7 +218,8 @@ if __name__=='__main__':
         mse = tf.keras.losses.MeanSquaredError()
         encoding_loss = mse(latents, encoded_latents)
         perceptual_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)])
-        total_loss = encoding_loss + perceptual_loss
+        l2_loss = mse(images, encoded_images)
+        total_loss = (base_option['encoding_lambda']*encoding_loss) + perceptual_loss + (base_option['l2_lambda']*l2_loss)
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
@@ -241,6 +229,8 @@ if __name__=='__main__':
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('perceptual_loss', perceptual_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('perceptual_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -267,3 +257,7 @@ if __name__=='__main__':
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
+
+
+if __name__=='__main__':
+    main()
