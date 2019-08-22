@@ -8,6 +8,7 @@ import tensorflow as tf
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 from tqdm import tqdm
+from lpips import lpips_tf
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
@@ -198,11 +199,11 @@ def main():
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    images = Gs.get_output_for(noise_latents, None)
+    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
     latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
     encoded_latents = encode(images)
     Gs.components.synthesis.num_inputs=2
-    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None)
+    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
     # encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, randomize_noise=False)
 
     # DEFINE VGG FOR PERCEPTUAL LOSS
@@ -214,30 +215,52 @@ def main():
     encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
     encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
 
+    # DEFINE LPIPS
+
+    # LOAD LATENT DIRECTIONS
+    latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
+    latent_encoded_smile = tf.identity(encoded_latents)
+    latent_encoded_smile += 2.0 * latent_smile
+    recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, randomize_noise=True)
+    smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, randomize_noise=True)
+
     with tf.name_scope('loss'):
         mse = tf.keras.losses.MeanSquaredError()
         encoding_loss = mse(latents, encoded_latents)
         perceptual_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)])
         l2_loss = mse(images, encoded_images)
-        total_loss = (base_option['encoding_lambda']*encoding_loss) + perceptual_loss + (base_option['l2_lambda']*l2_loss)
+        lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
+        total_loss = (base_option['encoding_lambda']*encoding_loss) + lpips_loss + (base_option['l2_lambda']*l2_loss)
 
     with tf.name_scope('metric'):
-        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
-        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
+        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
 
     # DEFINE SUMMARIES
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('perceptual_loss', perceptual_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('perceptual_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('perceptual_loss', perceptual_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('encoded', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('recovered(withnoise)', tf.clip_by_value(tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('recovered_smile', tf.clip_by_value(tf.transpose(smile_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         summary = tf.summary.merge_all()
+
+    # DEFINE GRAPH NEEDED FOR TESTING
+    with tf.name_scope("test_encode"):
+        test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
+        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
+        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent, None, is_validation=True, use_noise=True, randomize_noise=False, output_transform=dict(nchw_to_nhwc=True))
+        tf.add_to_collection('TEST_NODES', test_image_input)
+        tf.add_to_collection('TEST_NODES', test_encoded_latent)
+        tf.add_to_collection('TEST_NODES', test_recovered_image)
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
