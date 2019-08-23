@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from lpips import lpips_tf
 from stylegan.training.networks_stylegan import *
 
 
@@ -15,8 +16,9 @@ class ModelEncodedStyleGAN(object):
         self.encoded_latent = self.encoder.build(input)
         self.recovered_image = self.generator.build(self.encoded_latent)
         self.original_image = tf.transpose(input, perm=[0,2,3,1])
-        self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
-        self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
+        self.perceptual_distance = lpips_tf.lpips(self.original_image, self.recovered_image)
+        # self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
+        # self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
         self.recovered_test_image = self.generator.build(self.encoder.build(test_input, reuse=True))
         self.original_test_image = tf.transpose(test_input, perm=[0,2,3,1])
         self.is_built = True
@@ -104,7 +106,7 @@ class Generator(object):
         output = self.stylegan_model.get_output_for(input,
             is_validation=True,
             style_mixing_prob=None,
-            randomize_noise=False,
+            randomize_noise=True,
             structure='fixed') # refer to function G_synthesis defined in ./stylegan/training/networks_stylegan.py for arguments
         if not nchw: output = tf.transpose(output, perm=[0,2,3,1])
         return output

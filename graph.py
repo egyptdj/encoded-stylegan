@@ -23,11 +23,12 @@ class GraphEncodedStyleGAN(object):
         with tf.name_scope('loss'):
             self.perceptual_loss = []
             mse = tf.keras.losses.MeanSquaredError()
-            for original, recovered in zip(model.perceptual_features_original, model.perceptual_features_recovered):
-                self.perceptual_loss.append(mse(original, recovered))
+            # for original, recovered in zip(model.perceptual_features_original, model.perceptual_features_recovered):
+            #     self.perceptual_loss.append(mse(original, recovered))
+            self.lpips_loss = tf.reduce_sum(model.perceptual_distance)
             self.mse_loss = mse(model.original_image, model.recovered_image)
-            self.mse_lambda = tf.Variable(initial_value=1.0, trainable=False, dtype=tf.float32, shape=[], name='mse_lambda')
-            self.total_loss = self.mse_lambda * self.mse_loss + tf.reduce_sum(self.perceptual_loss)
+            # self.mse_lambda = tf.Variable(initial_value=1.0, trainable=False, dtype=tf.float32, shape=[], name='mse_lambda')
+            self.total_loss = self.mse_loss + self.lpips_loss
 
         # DEFINE METRICS
         with tf.name_scope('metric'):
@@ -38,7 +39,8 @@ class GraphEncodedStyleGAN(object):
         with tf.name_scope('summary'):
             _ = tf.summary.scalar('total_loss', self.total_loss, family='loss', collections=['SCALAR_SUMMARY'])
             _ = tf.summary.scalar('mse_loss', self.mse_loss, family='loss', collections=['SCALAR_SUMMARY'])
-            _ = [tf.summary.scalar('perceptual_loss_{}'.format(idx), percep_loss, family='loss', collections=['SCALAR_SUMMARY']) for idx, percep_loss in enumerate(self.perceptual_loss)]
+            _ = tf.summary.scalar('lpips_loss', self.lpips_loss, family='loss', collections=['SCALAR_SUMMARY'])
+            # _ = [tf.summary.scalar('perceptual_loss_{}'.format(idx), percep_loss, family='loss', collections=['SCALAR_SUMMARY']) for idx, percep_loss in enumerate(self.perceptual_loss)]
             _ = tf.summary.scalar('psnr', self.psnr, family='metrics', collections=['SCALAR_SUMMARY'])
             _ = tf.summary.scalar('ssim', self.ssim, family='metrics', collections=['SCALAR_SUMMARY'])
             _ = tf.summary.image('train_original', self.original_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY', 'TRAIN_IMAGE_SUMMARY'])
@@ -56,7 +58,7 @@ class GraphEncodedStyleGAN(object):
         # DEFINE OPTIMIZERS
         with tf.name_scope('optimize'):
             encoder_vars = tf.trainable_variables('encoder')
-            optimizer = tf.train.RMSPropOptimizer(learning_rate=self.learning_rate, name='optimizer')
+            optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate, name='optimizer')
             gv = optimizer.compute_gradients(loss=self.total_loss, var_list=encoder_vars)
             self.optimize = optimizer.apply_gradients(gv, name='optimize')
 
