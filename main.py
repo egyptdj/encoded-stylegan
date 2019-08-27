@@ -175,7 +175,7 @@ def main():
             assert len(image_list)>0
 
             imbatch = np.stack([np.array(PIL.Image.open(base_option['test_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
-            test_feed_dict = {test_image_input: imbatch, latent_manipulator: np.zeros(latent_manipulator.shape.as_list())}
+            test_feed_dict = {test_image_input: imbatch, latent_manipulator:np.zeros(latent_manipulator.shape.as_list())}
 
             test_image_summary = tf.summary.image('recovered_test', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['TEST_SUMMARY'])
 
