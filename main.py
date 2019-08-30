@@ -53,7 +53,6 @@ def main():
     # tflib.tfutil.init_uninitialized_vars()
     test_summary = sess.run(summary)
     summary_writer.add_summary(test_summary)
-    import ipdb; ipdb.set_trace()
 
 if __name__=='__main__':
     main()
