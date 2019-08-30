@@ -14,7 +14,7 @@ def parse():
     parser.add_argument('-dT', '--test_dir', type=str, default='images', help='directory path to load dataset')
     parser.add_argument('-dR', '--result_dir', type=str, default='results', help='directory path to save the trained model and/or the resulting image')
     parser.add_argument('-dC', '--cache_dir', type=str, default='cache', help='directory path to save cache files')
-    parser.add_argument('-iN', '--num_iter', type=int, default=100000, help='total number of iterations to train')
+    parser.add_argument('-iN', '--num_iter', type=int, default=10000000, help='total number of iterations to train')
     parser.add_argument('-iS', '--save_iter', type=int, default=1000, help='save model at every specified iterations')
     opt_dict = vars(parser.parse_args())
 

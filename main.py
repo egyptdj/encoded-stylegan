@@ -108,7 +108,8 @@ def main():
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
     images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
-    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+    # latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+    latents = Gs.find_var('dlatents_out')
     encoded_latents, encoded_noise = encode(images)
     Gs.components.synthesis.num_inputs=2
     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=False)
