@@ -95,9 +95,8 @@ def main():
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
     images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
-    # latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-    latents = Gs.find_var('Gs_1/G_mapping/dlatents_out')
-    encoded_latents, encoded_noise = encode(images)
+    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+    encoded_latents = encode(images)
     Gs.components.synthesis.num_inputs=2
     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
 
@@ -154,8 +153,8 @@ def main():
         val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
         val_feed_dict = {test_image_input: val_imbatch}
         _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY'])
-        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY'])])
-        test_image_summary = tf.summary.merge(tf.get_collection(['TEST_SUMMARY']))
+        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY'])
+        test_image_summary = tf.summary.merge(tf.get_collection('TEST_SUMMARY'))
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
