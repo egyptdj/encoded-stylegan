@@ -94,11 +94,11 @@ def main():
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
+    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
     encoded_latents = encode(images)
     Gs.components.synthesis.num_inputs=2
-    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=base_option['randomize_noise'], randomize_noise=base_option['randomize_noise'])
+    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
@@ -112,8 +112,9 @@ def main():
         mse = tf.keras.losses.MeanSquaredError()
         encoding_loss = mse(latents, encoded_latents)
         l2_loss = mse(images, encoded_images)
-        lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
-        total_loss = (base_option['encoding_lambda']*encoding_loss) + (base_option['lpips_lambda']*lpips_loss) + (base_option['l2_lambda']*l2_loss)
+        # lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
+        # total_loss = (base_option['encoding_lambda']*encoding_loss) + (base_option['lpips_lambda']*lpips_loss) + (base_option['l2_lambda']*l2_loss)
+        total_loss = base_option['encoding_lambda']*encoding_loss
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
@@ -122,8 +123,8 @@ def main():
     # DEFINE SUMMARIES
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
