@@ -101,7 +101,7 @@ def main():
     if base_option['num_gpus'] is not None:
         assert base_option['minibatch_size']%base_option['num_gpus']==0
         with tf.device("/cpu:0"):
-            noise_latents_split = tf.split(x, num_gpus)
+            noise_latents_split = tf.split(noise_latents, num_gpus)
 
         images_split = []
         latents_split = []
@@ -110,7 +110,7 @@ def main():
         Gs.components.synthesis.num_inputs=2
         for gpu_idx in range(base_option['num_gpus']):
             with tf.device("/gpu:%d" % gpu):
-                images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                images = Gs.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
                 latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
                 encoded_latents = encode(images, reuse=gpu_idx)
                 encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
