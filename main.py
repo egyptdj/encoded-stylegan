@@ -85,7 +85,6 @@ def encode(
     return output
 
 
-
 def main():
     base_option = utils.option.parse()
 
@@ -110,17 +109,40 @@ def main():
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
 
     with tf.name_scope('loss'):
+        total_loss = 0.0
         mse = tf.keras.losses.MeanSquaredError()
-        percep_images = Vgg16().build(images)
-        percep_encoded_images =Vgg16().build(encoded_images)
-        encoding_loss = mse(latents, encoded_latents)
-        l2_loss = mse(images, encoded_images)
+        mae = tf.keras.losses.MeanAbsoluteError()
 
+        if base_option['vgg_lambda']:
+            image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+            image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
+            image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
+            encoded_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+            encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
+            encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
+            vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
+            _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['vgg_lambda']*vgg_loss
 
-        vgg_loss =  # https://github.com/machrisaa/tensorflow-vgg
-        # lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
-        # total_loss = (base_option['encoding_lambda']*encoding_loss) + (base_option['lpips_lambda']*lpips_loss) + (base_option['l2_lambda']*l2_loss)
-        total_loss = base_option['encoding_lambda']*encoding_loss
+        if base_option['encoding_lambda']:
+            encoding_loss = mse(latents, encoded_latents)
+            _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['encoding_lambda']*encoding_loss
+
+        if base_option['lpips_lambda']:
+            lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
+            _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['lpips_lambda']*lpips_loss
+
+        if base_option['l2_lambda']:
+            l2_loss = mse(images, encoded_images)
+            _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['l2_lambda']*l2_loss
+
+        if base_option['l1_lambda']:
+            l1_loss = mae(images, encoded_images)
+            _ = tf.summary.scalar('l1_loss', l1_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['l1_lambda']*l1_loss
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
@@ -128,9 +150,6 @@ def main():
 
     # DEFINE SUMMARIES
     with tf.name_scope('summary'):
-        _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        # _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        # _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
