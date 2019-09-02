@@ -101,7 +101,7 @@ def main():
     if base_option['num_gpus'] is not None:
         assert base_option['minibatch_size']%base_option['num_gpus']==0
         with tf.device("/cpu:0"):
-            noise_latents_split = tf.split(noise_latents, num_gpus)
+            noise_latents_split = tf.split(noise_latents, base_option['num_gpus'])
 
         images_split = []
         latents_split = []
