@@ -102,9 +102,3 @@ venv.bak/
 
 # mypy
 .mypy_cache/
-
-# custom compile directories
-cache/
-results/
-latents/
-images/test
