@@ -110,7 +110,7 @@ def main():
         for gpu_idx in range(base_option['num_gpus']):
             with tf.device("/gpu:%d" % gpu_idx):
                 print(gpu_idx)
-                Gs.num_inputs=1
+                Gs.num_inputs=2
                 Gs.components.synthesis.num_inputs=2
                 reuse = False if gpu_idx==0 else True
                 images = Gs.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
