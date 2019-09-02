@@ -98,7 +98,7 @@ def main():
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    if num_gpus is not None:
+    if base_option['num_gpus'] is not None:
         assert base_option['minibatch_size']%base_option['num_gpus']==0
         with tf.device("/cpu:0"):
             noise_latents_split = tf.split(x, num_gpus)
