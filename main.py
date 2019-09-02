@@ -8,6 +8,7 @@ import PIL.Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 from tqdm import tqdm
+from vgg import Vgg16
 from lpips import lpips_tf
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
@@ -110,8 +111,13 @@ def main():
 
     with tf.name_scope('loss'):
         mse = tf.keras.losses.MeanSquaredError()
+        percep_images = Vgg16().build(images)
+        percep_encoded_images =Vgg16().build(encoded_images)
         encoding_loss = mse(latents, encoded_latents)
         l2_loss = mse(images, encoded_images)
+
+
+        vgg_loss =  # https://github.com/machrisaa/tensorflow-vgg
         # lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
         # total_loss = (base_option['encoding_lambda']*encoding_loss) + (base_option['lpips_lambda']*lpips_loss) + (base_option['l2_lambda']*l2_loss)
         total_loss = base_option['encoding_lambda']*encoding_loss
