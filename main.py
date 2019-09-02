@@ -94,11 +94,30 @@ def main():
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-    encoded_latents = encode(images)
-    Gs.components.synthesis.num_inputs=2
-    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    if num_gpus is not None:
+        assert base_option['minibatch_size']%num_gpus==0
+        with tf.device("/cpu:0"):
+            noise_latents_split = tf.split(x, num_gpus)
+
+        images_split = []
+        latents_split = []
+        encoded_latents_split = []
+        encoded_images_split = []
+        Gs.components.synthesis.num_inputs=2
+        for gpu_idx in range(num_gpus):
+            with tf.device("/gpu:%d" % gpu):
+                images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
+                encoded_latents = encode(images, reuse=gpu_idx)
+                encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                images_split.append(images)
+                latents_split.append(latents)
+                encoded_latents_split.append(encoded_latents)
+                encoded_images_split.append(encoded_images)
+        images = tf.concat(images_split, axis=0)
+        latents = tf.concat(latents_split, axis=0)
+        encoded_latents = tf.concat(encoded_latents_split, axis=0)
+        encoded_images = tf.concat(encoded_images_split, axis=0)
 
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
@@ -139,10 +158,15 @@ def main():
             _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l2_lambda']*l2_loss
 
-        if base_option['l1_lambda']:
-            l1_loss = mae(images, encoded_images)
-            _ = tf.summary.scalar('l1_loss', l1_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l1_lambda']*l1_loss
+        if base_option['l1_latent_lambda']:
+            l1_latent_loss = mae(latents, encoded_latents)
+            _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['l1_latent_lambda']*l1_latent_loss
+
+        if base_option['l1_image_lambda']:
+            l1_image_loss = mae(images, encoded_images)
+            _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['l1_image_lambda']*l1_image_loss
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
