@@ -89,8 +89,12 @@ def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
-    url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-    with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+    try:
+        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+    except:
+        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+        with dnnlib.util.open_url(url, cache_dir=config.cache_dir) as f: _, _, Gs = pickle.load(f)
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
