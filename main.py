@@ -15,73 +15,17 @@ from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
 
 
-def encode(
-    input,                              # First input: Images [minibatch, channel, height, width].
-    out_shape           = [18, 512],
-    reuse               = False,
-    num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
-    resolution          = 1024,           # Input resolution. Overridden based on dataset.
-    label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
-    fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
-    fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
-    fmap_max            = 512,          # Maximum number of feature maps in any layer.
-    nonlinearity        = 'lrelu',      # Activation function: 'relu', 'lrelu',
-    use_wscale          = True,         # Enable equalized learning rate?
-    mbstd_group_size    = 4,            # Group size for the minibatch standard deviation layer, 0 = disable.
-    mbstd_num_features  = 1,            # Number of features for the minibatch standard deviation layer.
-    dtype               = 'float32',    # Data type to use for activations and outputs.
-    fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
-    blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
-    structure           = 'fixed',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
-    is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
-    **_kwargs):                         # Ignore unrecognized keyword args.
-
-    resolution_log2 = int(np.log2(resolution))
-    assert resolution == 2**resolution_log2 and resolution >= 4
-    assert isinstance(out_shape, list) or isinstance(out_shape, tuple)
-    def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
-    def blur(x): return blur2d(x, blur_filter) if blur_filter else x
-    if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
-    act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
-    out_fmap = np.prod(out_shape)
-
+def encode(input, reuse):
+    x = input
     with tf.variable_scope('encoder', reuse=reuse):
-        input.set_shape([None, num_channels, resolution, resolution])
-        input = tf.cast(input, dtype)
-        lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
-        output = None
-
-        # Building blocks.
-        def fromrgb(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
-                x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
-                return x
-        def block(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('%dx%d' % (2**res, 2**res)):
-                if res >= 3: # 8x8 and up
-                    with tf.variable_scope('Conv0'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Conv1_down'):
-                        x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
-                else: # 4x4
-                    if mbstd_group_size > 1:
-                        x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
-                    with tf.variable_scope('Conv'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense0'):
-                        x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense1'):
-                        x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
-                        x = tf.reshape(x, [-1]+out_shape)
-                return x
-
-        x = fromrgb(input, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            x = block(x, res)
-        output = block(x, 2)
-
-        assert output.dtype == tf.as_dtype(dtype)
-        output = tf.identity(output, name='output')
+        with tf.variable_scope('Conv'):
+            x = leaky_relu(apply_bias(conv2d(x, fmaps=512, kernel=3)))
+        with tf.variable_scope('Dense0'):
+            x = leaky_relu(apply_bias(dense(x, fmaps=256)))
+        with tf.variable_scope('Dense1'):
+            x = apply_bias(dense(x, fmaps=18*512, gain=1))
+            x = tf.reshape(x, [-1,18,512])
+        output = tf.identity(x, name='output')
     return output
 
 
@@ -89,44 +33,23 @@ def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
-    try:
-        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    except:
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+    url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+    with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
+    # try:
+    #     url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+    #     with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
+    # except:
+    #     url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+    #     with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, D, Gs = pickle.load(f)
 
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    if base_option['num_gpus'] is not None:
-        assert base_option['minibatch_size']%base_option['num_gpus']==0
-        with tf.device("/cpu:0"):
-            noise_latents_split = tf.split(noise_latents, base_option['num_gpus'])
-
-        images_split = []
-        latents_split = []
-        encoded_latents_split = []
-        encoded_images_split = []
-        for gpu_idx in range(base_option['num_gpus']):
-            with tf.device("/gpu:%d" % gpu_idx):
-                reuse = False if gpu_idx==0 else True
-                G_mapping_clone = Gs.components.mapping.clone("G_mapping_gpu%d" % gpu_idx)
-                G_synth_clone = Gs.components.synthesis.clone("G_synthesis_gpu%d" % gpu_idx)
-                latents = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
-                images = G_synth_clone.get_output_for(latents, None, use_noise=False, randomize_noise=False)
-                # images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
-                # latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
-                G_synth_encoded_clone = Gs.components.synthesis.clone("G_synthesis_encoded_gpu%d" % gpu_idx)
-                encoded_latents = encode(images, reuse=reuse)
-                encoded_images = G_synth_encoded_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-                images_split.append(images)
-                latents_split.append(latents)
-                encoded_latents_split.append(encoded_latents)
-                encoded_images_split.append(encoded_images)
-        images = tf.concat(images_split, axis=0)
-        latents = tf.concat(latents_split, axis=0)
-        encoded_latents = tf.concat(encoded_latents_split, axis=0)
-        encoded_images = tf.concat(encoded_images_split, axis=0)
+    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+    # encoded_latents = encode(images, reuse=reuse)
+    _D_out = D.get_output_for(images, None)
+    encoded_latents = encode(tf.get_default_graph().get_tensor_by_name('D_1/4x4/MinibatchStddev/concat:0'), reuse=False)
+    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
@@ -198,7 +121,8 @@ def main():
     with tf.name_scope("test_encode"):
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
+        _D_out = D.get_output_for(tf.transpose(test_image_input, perm=[0,3,1,2]), None)
+        test_encoded_latent = encode(tf.get_default_graph().get_tensor_by_name('test_encode/D/4x4/MinibatchStddev/concat:0'), reuse=True)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
@@ -229,7 +153,6 @@ def main():
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
-        import ipdb; ipdb.set_trace()
         iter_scalar_summary, _ = sess.run([scalar_summary, optimize])
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
