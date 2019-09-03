@@ -110,12 +110,15 @@ def main():
         for gpu_idx in range(base_option['num_gpus']):
             with tf.device("/gpu:%d" % gpu_idx):
                 reuse = False if gpu_idx==0 else True
-                Gs_clone = Gs.clone()
-                G_synth_clone = Gs.components.synthesis.clone("gpu%d" % gpu_idx)
-                images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
-                latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
+                G_mapping_clone = Gs.components.mapping.clone("G_mapping_gpu%d" % gpu_idx)
+                G_synth_clone = Gs.components.synthesis.clone("G_synthesis_gpu%d" % gpu_idx)
+                latents= = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
+                images = G_synth_clone.get_output_for(latents, None, use_noise=False, randomize_noise=False)
+                # images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
+                # latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
+                G_synth_encoded_clone = Gs.components.synthesis.clone("G_synthesis_encoded_gpu%d" % gpu_idx)
                 encoded_latents = encode(images, reuse=reuse)
-                encoded_images = G_synth_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                encoded_images = G_synth_encoded_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                 images_split.append(images)
                 latents_split.append(latents)
                 encoded_latents_split.append(encoded_latents)
