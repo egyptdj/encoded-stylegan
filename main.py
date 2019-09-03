@@ -109,12 +109,13 @@ def main():
         encoded_images_split = []
         for gpu_idx in range(base_option['num_gpus']):
             with tf.device("/gpu:%d" % gpu_idx):
-                print(gpu_idx)
                 reuse = False if gpu_idx==0 else True
-                images = Gs.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
+                Gs_clone = Gs.clone()
+                G_synth_clone = Gs.components.synthesis.clone("gpu%d" % gpu_idx)
+                images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
                 latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
                 encoded_latents = encode(images, reuse=reuse)
-                encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                encoded_images = G_synth_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                 images_split.append(images)
                 latents_split.append(latents)
                 encoded_latents_split.append(encoded_latents)
@@ -124,13 +125,13 @@ def main():
         encoded_latents = tf.concat(encoded_latents_split, axis=0)
         encoded_images = tf.concat(encoded_images_split, axis=0)
 
-    # # LOAD LATENT DIRECTIONS
-    # latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
-    # latent_encoded_smile = tf.identity(encoded_latents)
-    # latent_encoded_smile += 2.0 * latent_smile
+    # LOAD LATENT DIRECTIONS
+    latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
+    latent_encoded_smile = tf.identity(encoded_latents)
+    latent_encoded_smile += 2.0 * latent_smile
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
-    # smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
+    smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
 
     with tf.name_scope('loss'):
         total_loss = 0.0
@@ -185,17 +186,18 @@ def main():
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('encoded', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('recovered(withnoise)', tf.clip_by_value(tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        # _ = tf.summary.image('recovered_smile', tf.clip_by_value(tf.transpose(smile_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('recovered_smile', tf.clip_by_value(tf.transpose(smile_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         summary = tf.summary.merge_all()
 
     # DEFINE GRAPH NEEDED FOR TESTING
     with tf.name_scope("test_encode"):
+        G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
         test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
-        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
+        test_recovered_image = G_synth_test.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
         tf.add_to_collection('TEST_NODES', test_image_input)
         tf.add_to_collection('TEST_NODES', test_encoded_latent)

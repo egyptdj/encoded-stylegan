@@ -106,5 +106,4 @@ venv.bak/
 # custom compile directories
 cache/
 results/
-latents/
 images/test
