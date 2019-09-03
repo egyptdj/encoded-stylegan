@@ -19,12 +19,12 @@ class EncodedStyleGAN(object):
 
     def _initialize(self):
         tflib.init_tf()
-        url = os.path.join(self.base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f:
-            _, _, Gs = pickle.load(f)
-        # url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        # with dnnlib.util.open_url(url, cache_dir=self.base_option['cache_dir']) as f:
+        # url = os.path.join(self.base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+        # with open(url, 'rb') as f:
         #     _, _, Gs = pickle.load(f)
+        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+        with dnnlib.util.open_url(url, cache_dir=self.base_option['cache_dir']) as f:
+            _, _, Gs = pickle.load(f)
 
         self.network = NetworkEncodedStyleGAN(
             data_dir = self.base_option['data_dir'],

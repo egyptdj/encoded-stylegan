@@ -14,6 +14,9 @@ class GraphEncodedStyleGAN(object):
         # DEFINE BASIC GRAPH VARIABLES
         self.original_image = tf.clip_by_value(model.original_image, 0.0, 1.0)
         self.recovered_image = tf.clip_by_value(model.recovered_image, 0.0, 1.0)
+        self.recovered_smile_image = tf.clip_by_value(model.recovered_smile_image, 0.0, 1.0)
+        self.recovered_gender_image = tf.clip_by_value(model.recovered_gender_image, 0.0, 1.0)
+        self.recovered_age_image = tf.clip_by_value(model.recovered_age_image, 0.0, 1.0)
         self.learning_rate = tf.placeholder(tf.float32, shape=[], name='learning_rate')
 
         # DEFINE LOSS
@@ -40,6 +43,9 @@ class GraphEncodedStyleGAN(object):
             _ = tf.summary.scalar('ssim', self.ssim, family='metrics', collections=['SCALAR_SUMMARY'])
             _ = tf.summary.image('original', self.original_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
             _ = tf.summary.image('recovered', self.recovered_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            _ = tf.summary.image('recovered_smile', self.recovered_smile_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            _ = tf.summary.image('recovered_age', self.recovered_age_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
+            _ = tf.summary.image('recovered_gender', self.recovered_gender_image, max_outputs=1, family='images', collections=['IMAGE_SUMMARY'])
             self.scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
             self.image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
             self.summary = tf.summary.merge_all()

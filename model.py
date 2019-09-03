@@ -14,6 +14,9 @@ class ModelEncodedStyleGAN(object):
         self.searchlight = tf.Variable(initial_value=np.zeros([input.shape[0],18,512]), trainable=True, dtype=tf.float32)
         self.original_image = input
         self.recovered_image = self.generator.build(self.searchlight)
+        self.recovered_smile_image = self.generator.build(self.searchlight+2*np.load('latents/smile.npy'))
+        self.recovered_gender_image = self.generator.build(self.searchlight+2*np.load('latents/gender.npy'))
+        self.recovered_age_image = self.generator.build(self.searchlight+2*np.load('latents/age.npy'))
         self.perceptual_features_original = self.perceptor.build(tf.image.resize(self.original_image, size=[224,224]))
         self.perceptual_features_recovered = self.perceptor.build(tf.image.resize(self.recovered_image, size=[224,224]))
         self.is_built = True
@@ -38,7 +41,7 @@ class Perceptor(object):
     def __init__(self, model):
         super(Perceptor, self).__init__()
         if model=='vgg16':
-            self.vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+            self.vgg = Vgg16('D:/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
         else: raise ValueError('perceptor model {} not available for use'.format(model))
 
     def build(self, input):

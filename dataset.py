@@ -13,7 +13,7 @@ class DatasetEncodedStyleGAN(object):
         self.is_built = False
 
     def build(self, uint=False, nchw=False):
-        im = np.array(PIL.Image.open(self.data_dir+"/"+self.image_list[1]))[np.newaxis,...]
+        im = np.array(PIL.Image.open(self.data_dir+"/"+self.image_list[0]))[np.newaxis,...]
         self.image = tf.image.resize(tf.constant(im), [1024,1024])
         if not uint: self.image = tf.cast(self.image, tf.float32)/255.0
         if nchw: self.image = tf.transpose(self.image, perm=[0,3,1,2])
