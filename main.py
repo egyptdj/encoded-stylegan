@@ -96,37 +96,13 @@ def main():
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
         with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
+    import ipdb; ipdb.set_trace()
     # DEFINE NODES
     noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    if base_option['num_gpus'] is not None:
-        assert base_option['minibatch_size']%base_option['num_gpus']==0
-        with tf.device("/cpu:0"):
-            noise_latents_split = tf.split(noise_latents, base_option['num_gpus'])
-
-        images_split = []
-        latents_split = []
-        encoded_latents_split = []
-        encoded_images_split = []
-        for gpu_idx in range(base_option['num_gpus']):
-            with tf.device("/gpu:%d" % gpu_idx):
-                reuse = False if gpu_idx==0 else True
-                G_mapping_clone = Gs.components.mapping.clone("G_mapping_gpu%d" % gpu_idx)
-                G_synth_clone = Gs.components.synthesis.clone("G_synthesis_gpu%d" % gpu_idx)
-                latents = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
-                images = G_synth_clone.get_output_for(latents, None, use_noise=False, randomize_noise=False)
-                # images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
-                # latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
-                G_synth_encoded_clone = Gs.components.synthesis.clone("G_synthesis_encoded_gpu%d" % gpu_idx)
-                encoded_latents = encode(images, reuse=reuse)
-                encoded_images = G_synth_encoded_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-                images_split.append(images)
-                latents_split.append(latents)
-                encoded_latents_split.append(encoded_latents)
-                encoded_images_split.append(encoded_images)
-        images = tf.concat(images_split, axis=0)
-        latents = tf.concat(latents_split, axis=0)
-        encoded_latents = tf.concat(encoded_latents_split, axis=0)
-        encoded_images = tf.concat(encoded_images_split, axis=0)
+    images = Gs.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
+    latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
+    encoded_latents = encode(images, reuse=reuse)
+    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
