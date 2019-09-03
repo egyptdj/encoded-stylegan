@@ -226,6 +226,7 @@ def main():
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
+        import ipdb; ipdb.set_trace()
         iter_scalar_summary, _ = sess.run([scalar_summary, optimize])
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
