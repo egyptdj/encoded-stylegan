@@ -97,41 +97,31 @@ def main():
         with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
     # DEFINE NODES
-    noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
+    noise_latents = tf.placeholder(tf.float32, [None] + Gs.input_shape[1:], name='image_input')
+    latent_manipulator = tf.placeholder_with_default(tf.zeros_like(noise_latents), noise_latents.shape, name='latent_manipulator')
+
+    optimizer = tflib.Optimizer(name='TrainE', learning_rate=base_option['learning_rate'])
+
+    # noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
     if base_option['num_gpus'] is not None:
-        assert base_option['minibatch_size']%base_option['num_gpus']==0
         with tf.device("/cpu:0"):
             noise_latents_split = tf.split(noise_latents, base_option['num_gpus'])
 
-        images_split = []
-        latents_split = []
-        encoded_latents_split = []
-        encoded_images_split = []
         for gpu_idx in range(base_option['num_gpus']):
             with tf.device("/gpu:%d" % gpu_idx):
                 reuse = False if gpu_idx==0 else True
                 G_mapping_clone = Gs.components.mapping.clone("G_mapping_gpu%d" % gpu_idx)
                 G_synth_clone = Gs.components.synthesis.clone("G_synthesis_gpu%d" % gpu_idx)
+                G_synth_encoded_clone = Gs.components.synthesis.clone("G_synthesis_encoded_gpu%d" % gpu_idx)
                 latents = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
                 images = G_synth_clone.get_output_for(latents, None, use_noise=False, randomize_noise=False)
-                # images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
-                # latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
-                G_synth_encoded_clone = Gs.components.synthesis.clone("G_synthesis_encoded_gpu%d" % gpu_idx)
                 encoded_latents = encode(images, reuse=reuse)
                 encoded_images = G_synth_encoded_clone.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-                images_split.append(images)
-                latents_split.append(latents)
-                encoded_latents_split.append(encoded_latents)
-                encoded_images_split.append(encoded_images)
+
         images = tf.concat(images_split, axis=0)
         latents = tf.concat(latents_split, axis=0)
         encoded_latents = tf.concat(encoded_latents_split, axis=0)
         encoded_images = tf.concat(encoded_images_split, axis=0)
-
-    # LOAD LATENT DIRECTIONS
-    latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
-    latent_encoded_smile = tf.identity(encoded_latents)
-    latent_encoded_smile += 2.0 * latent_smile
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
@@ -230,7 +220,7 @@ def main():
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
         import ipdb; ipdb.set_trace()
-        iter_scalar_summary, _ = sess.run([scalar_summary, optimize])
+        iter_scalar_summary, _ = sess.run([scalar_summary, optimize], options=tf.RunOptions(report_tensor_allocations_upon_oom=True))
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
