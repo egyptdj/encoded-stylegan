@@ -95,7 +95,7 @@ def main():
     latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
     # encoded_latents = encode(images, reuse=reuse)
     _D_out = D.get_output_for(images, None)
-    encoded_latents = encode(tf.get_default_graph().get_tensor_by_name(('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/'.format(base_option['disc_resolution'])+'Conv1_down/LeakyReLU/IdentityN:0'), resolution=base_option['disc_resolution'], reuse=False))
+    encoded_latents = encode(tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/'.format(base_option['disc_resolution'])+'Conv1_down/LeakyReLU/IdentityN:0'), resolution=base_option['disc_resolution'], reuse=False)
     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     # LOAD LATENT DIRECTIONS
@@ -169,7 +169,7 @@ def main():
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
         _D_out = D.get_output_for(tf.transpose(test_image_input, perm=[0,3,1,2]), None)
-        test_encoded_latent = encode(tf.get_default_graph().get_tensor_by_name(('test_encode/D/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/'.format(base_option['disc_resolution'])+'Conv1_down/LeakyReLU/IdentityN:0'), resolution=base_option['disc_resolution'], reuse=True))
+        test_encoded_latent = encode(tf.get_default_graph().get_tensor_by_name('test_encode/D/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/'.format(base_option['disc_resolution'])+'Conv1_down/LeakyReLU/IdentityN:0'), resolution=base_option['disc_resolution'], reuse=True)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
