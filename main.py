@@ -112,7 +112,7 @@ def main():
                 reuse = False if gpu_idx==0 else True
                 G_mapping_clone = Gs.components.mapping.clone("G_mapping_gpu%d" % gpu_idx)
                 G_synth_clone = Gs.components.synthesis.clone("G_synthesis_gpu%d" % gpu_idx)
-                latents= = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
+                latents = G_mapping_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True)
                 images = G_synth_clone.get_output_for(latents, None, use_noise=False, randomize_noise=False)
                 # images = Gs_clone.get_output_for(noise_latents_split[gpu_idx], None, is_validation=True, use_noise=False, randomize_noise=False)
                 # latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
