@@ -16,6 +16,7 @@ def parse():
     parser.add_argument('-l1i', '--l1_image_lambda', type=float, default=1.0, help='l1 image coefficient')
     parser.add_argument('-l1l', '--l1_latent_lambda', type=float, default=1.0, help='l1 latent coefficient')
     parser.add_argument('-nE', '--exp_name', type=str, default='exp', help='experiment name')
+    parser.add_argument('-dT', '--dataset_generated', type=bool, default=True, help='generated dataset or FFHQ')
     parser.add_argument('-dD', '--data_dir', type=str, default='/media/bispl/workdisk/FFHQ_flickrface/tfrecords', help='directory path to load dataset')
     parser.add_argument('-dV', '--validation_dir', type=str, default='images/validation', help='directory path to load dataset')
     parser.add_argument('-dR', '--result_dir', type=str, default='results', help='directory path to save the trained model and/or the resulting image')
