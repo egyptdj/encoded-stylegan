@@ -11,6 +11,7 @@ def parse():
     parser.add_argument('-l', '--learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
     parser.add_argument('-n', '--randomize_noise', type=bool, default=False, help='randomize noise')
     parser.add_argument('-lE', '--encoding_lambda', type=float, default=1.0, help='encoding coefficient')
+    parser.add_argument('-lD', '--discpercep_lambda', type=float, default=1.0, help='discriminator perceptual coefficient')
     parser.add_argument('-lV', '--vgg_lambda', type=float, default=1.0, help='vgg perceptual coefficient')
     parser.add_argument('-lL', '--lpips_lambda', type=float, default=1.0, help='lpips coefficient')
     parser.add_argument('-l2', '--l2_lambda', type=float, default=1.0, help='l2 coefficient')

@@ -82,20 +82,21 @@ def main():
     tflib.init_tf()
     try:
         url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+        with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
     except:
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, D, Gs = pickle.load(f)
 
-    if base_option['dataset_generated']:
+    if base_option['generated_dataset']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
         noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
         images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
         latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-        _D_out = D.get_output_for(images, None)
-        D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-        encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        # _D_out = D.get_output_for(images, None)
+        # D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
+        # encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        encoded_latents = encode(images, reuse=False)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
@@ -105,9 +106,10 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        _D_out = D.get_output_for(images, None)
-        D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-        encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        # _D_out = D.get_output_for(images, None)
+        # D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
+        # encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        encoded_latents = encode(images, reuse=False)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
@@ -121,6 +123,13 @@ def main():
         total_loss = 0.0
         mse = tf.keras.losses.MeanSquaredError()
         mae = tf.keras.losses.MeanAbsoluteError()
+
+        if base_option['discpercep_lambda']:
+            image_out = D.get_output_for(images, None)
+            encoded_out = D.get_output_for(encoded_images, None)
+            import ipdb; ipdb.set_trace()
+            image_perception = tf.get_default_graph().get_tensor_by_name('D_1/')
+
 
         if base_option['vgg_lambda']:
             image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
