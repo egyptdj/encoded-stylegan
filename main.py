@@ -220,3 +220,6 @@ def main():
             val_iter_image_summary = sess.run(test_image_summary, feed_dict=val_feed_dict)
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
+
+if __name__ == '__main__':
+    main()
