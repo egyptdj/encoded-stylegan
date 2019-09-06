@@ -80,31 +80,41 @@ def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
-    url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-    with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
-    # try:
-    #     url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-    #     with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
-    # except:
-    #     url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-    #     with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, D, Gs = pickle.load(f)
+    try:
+        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+    except:
+        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
-    # DEFINE NODES
-    noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-    # encoded_latents = encode(images, reuse=reuse)
-    _D_out = D.get_output_for(images, None)
-    D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-    encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
-    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    if base_option['dataset_generated']:
+        # DEFINE NODES
+        print("SAMPLING DATASET FROM THE GENERATOR")
+        noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
+        images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+        _D_out = D.get_output_for(images, None)
+        D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
+        encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    else:
+        # LOAD FFHQ DATASET
+        print("LOADING FFHQ DATASET")
+        from stylegan.training import dataset
+        ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
+        ffhq.configure(base_option['minibatch_size'])
+        images, _ = ffhq.get_minibatch_tf()
+        images = tf.cast(images, tf.float32)/255.0
+        _D_out = D.get_output_for(images, None)
+        D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
+        encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
+    recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
     latent_encoded_smile = tf.identity(encoded_latents)
     latent_encoded_smile += 2.0 * latent_smile
-
-    recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
 
     with tf.name_scope('loss'):
@@ -123,7 +133,7 @@ def main():
             _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['vgg_lambda']*vgg_loss
 
-        if base_option['encoding_lambda']:
+        if base_option['encoding_lambda'] and base_option['dataset_generated']:
             encoding_loss = mse(latents, encoded_latents)
             _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['encoding_lambda']*encoding_loss
@@ -138,7 +148,7 @@ def main():
             _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l2_lambda']*l2_loss
 
-        if base_option['l1_latent_lambda']:
+        if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
             l1_latent_loss = mae(latents, encoded_latents)
             _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l1_latent_lambda']*l1_latent_loss
@@ -210,8 +220,3 @@ def main():
             val_iter_image_summary = sess.run(test_image_summary, feed_dict=val_feed_dict)
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
-
-
-
-if __name__=='__main__':
-    main()
