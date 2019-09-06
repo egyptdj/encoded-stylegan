@@ -93,9 +93,6 @@ def main():
         noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
         images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
         latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-        # _D_out = D.get_output_for(images, None)
-        # D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-        # encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
         encoded_latents = encode(images, reuse=False)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
@@ -106,9 +103,7 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        # _D_out = D.get_output_for(images, None)
-        # D_intermediate = tf.get_default_graph().get_tensor_by_name('D_1/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-        # encoded_latents = encode(D_intermediate, resolution=base_option['disc_resolution'], reuse=False)
+        import ipdb; ipdb.set_trace()
         encoded_latents = encode(images, reuse=False)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
