@@ -82,10 +82,10 @@ def main():
     tflib.init_tf()
     try:
         url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+        with open(url, 'rb') as f: _, D, Gs = pickle.load(f)
     except:
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, D, Gs = pickle.load(f)
 
     if base_option['dataset_generated']:
         # DEFINE NODES
