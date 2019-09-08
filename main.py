@@ -46,7 +46,16 @@ def encode(
     out_fmap = np.prod(out_shape)
 
     with tf.variable_scope('encoder', reuse=reuse):
+        input.set_shape([None, num_channels, resolution, resolution])
+        input = tf.cast(input, dtype)
+        lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
+        output = None
+
         # Building blocks.
+        def fromrgb(x, res): # res = 2..resolution_log2
+            with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
+                x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
+                return x
         def block(x, res): # res = 2..resolution_log2
             with tf.variable_scope('%dx%d' % (2**res, 2**res)):
                 if res >= 3: # 8x8 and up
@@ -103,7 +112,6 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        import ipdb; ipdb.set_trace()
         encoded_latents = encode(images, reuse=False)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
@@ -120,11 +128,17 @@ def main():
         mae = tf.keras.losses.MeanAbsoluteError()
 
         if base_option['discpercep_lambda']:
-            image_out = D.get_output_for(images, None)
-            encoded_out = D.get_output_for(encoded_images, None)
-            import ipdb; ipdb.set_trace()
-            image_perception = tf.get_default_graph().get_tensor_by_name('D_1/')
-
+            with tf.name_scope('Dimg'):
+                image_out = D.get_output_for(images, None)
+            with tf.name_scope('Denc'):
+                encoded_out = D.get_output_for(encoded_images, None)
+            image_perception_op = [op for op in tf.get_default_graph().get_operations() if (('Dimg' in op.name) and ('LeakyReLU/IdentityN' in op.name) and ('Conv' in op.name))]
+            encoded_perception_op = [op for op in tf.get_default_graph().get_operations() if (('Denc' in op.name) and ('LeakyReLU/IdentityN' in op.name and ('Conv' in op.name)))]
+            image_perception = [tf.get_default_graph().get_tensor_by_name('{}:0'.format(op.name)) for op in image_perception_op]
+            encoded_perception = [tf.get_default_graph().get_tensor_by_name('{}:0'.format(op.name)) for op in encoded_perception_op]
+            discpercep_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)])
+            _ = tf.summary.scalar('discpercep_loss', discpercep_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['discpercep_lambda']*discpercep_loss
 
         if base_option['vgg_lambda']:
             image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
@@ -183,9 +197,10 @@ def main():
     with tf.name_scope("test_encode"):
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        _D_out = D.get_output_for(tf.transpose(test_image_input, perm=[0,3,1,2]), None)
-        D_intermediate2 = tf.get_default_graph().get_tensor_by_name('test_encode/D/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
-        test_encoded_latent = encode(D_intermediate2, resolution=base_option['disc_resolution'], reuse=True)
+        # _D_out = D.get_output_for(tf.transpose(test_image_input, perm=[0,3,1,2]), None)
+        # D_intermediate2 = tf.get_default_graph().get_tensor_by_name('test_encode/D/'+'cond/'*int(np.log2(base_option['disc_resolution'])-2)+'{}x{}/Conv1_down/LeakyReLU/IdentityN:0'.format(base_option['disc_resolution'], base_option['disc_resolution']))
+        # test_encoded_latent = encode(D_intermediate2, resolution=base_option['disc_resolution'], reuse=True)
+        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,2,1]), reuse=True)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
