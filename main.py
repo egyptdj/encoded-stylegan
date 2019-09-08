@@ -129,8 +129,8 @@ def main():
 
         with tf.name_scope('gan_loss'):
             image_discriminator = tflib.Network("Dimg", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024)
-            encoded_image_discrimination = image_discriminator(encoded_images, None)
-            real_image_discrimination = image_discriminator(images, None)
+            encoded_image_discrimination = image_discriminator.get_output_for(encoded_images, None)
+            real_image_discrimination = image_discriminator.get_output_for(images, None)
             fake_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_image_discrimination), encoded_image_discrimination)
             real_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_image_discrimination), real_image_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_image_discrimination), encoded_image_discrimination)
             image_gan_loss = fake_image_loss + real_image_loss
@@ -138,8 +138,8 @@ def main():
             total_loss += image_gan_loss
 
             latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_styelgan.G_mapping', dlatent_size=1)
-            encoded_latent_discrimination = latent_discriminator(encoded_latents, None)
-            real_latent_discrimination = latent_discriminator(latents, None)
+            encoded_latent_discrimination = latent_discriminator.get_output_for(encoded_latents, None)
+            real_latent_discrimination = latent_discriminator.get_output_for(latents, None)
             fake_latent_loss = tf.kears.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
             real_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination)
             latent_gan_loss = fake_latent_loss + real_latent_loss
