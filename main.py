@@ -123,7 +123,8 @@ def main():
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
 
     with tf.name_scope('loss'):
-        total_loss = 0.0
+        generator_loss = 0.0
+        discriminator_loss = 0.0
         mse = tf.keras.losses.MeanSquaredError()
         mae = tf.keras.losses.MeanAbsoluteError()
 
@@ -133,58 +134,29 @@ def main():
             real_image_discrimination = image_discriminator.get_output_for(images, None)
             fake_image_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_image_discrimination), encoded_image_discrimination))
             real_image_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(real_image_discrimination), real_image_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_image_discrimination), encoded_image_discrimination))
-            image_gan_loss = fake_image_loss + real_image_loss
-            _ = tf.summary.scalar('image_gan_fake_loss', fake_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            _ = tf.summary.scalar('image_gan_real_loss', real_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            _ = tf.summary.scalar('image_gan_loss', image_gan_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += image_gan_loss
 
             latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=4, latent_size=18*512)
             encoded_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(encoded_latents, [-1,18*512]), None)
             real_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(latents, [-1,18*512]), None)
             fake_latent_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination))
             real_latent_loss = tf.reduce_mean(tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination))
-            latent_gan_loss = fake_latent_loss + real_latent_loss
+
             _ = tf.summary.scalar('latent_gan_fake_loss', fake_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             _ = tf.summary.scalar('latent_gan_real_loss', real_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            _ = tf.summary.scalar('latent_gan_loss', latent_gan_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += latent_gan_loss
-
-        if base_option['vgg_lambda']:
-            image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
-            image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
-            image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
-            encoded_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
-            encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
-            encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
-            vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
-            _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['vgg_lambda']*vgg_loss
-
-        if base_option['encoding_lambda'] and base_option['dataset_generated']:
-            encoding_loss = mse(latents, encoded_latents)
-            _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['encoding_lambda']*encoding_loss
-
-        if base_option['lpips_lambda']:
-            lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
-            _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['lpips_lambda']*lpips_loss
-
-        if base_option['l2_lambda']:
-            l2_loss = mse(images, encoded_images)
-            _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l2_lambda']*l2_loss
+            _ = tf.summary.scalar('image_gan_fake_loss', fake_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            _ = tf.summary.scalar('image_gan_real_loss', real_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            generator_loss += fake_image_loss + fake_latent_loss
+            discriminator_loss += real_image_loss + real_latent_loss
 
         if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
             l1_latent_loss = mae(latents, encoded_latents)
             _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l1_latent_lambda']*l1_latent_loss
+            generator_loss += base_option['l1_latent_lambda']*l1_latent_loss
 
         if base_option['l1_image_lambda']:
             l1_image_loss = mae(images, encoded_images)
             _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l1_image_lambda']*l1_image_loss
+            generator_loss += base_option['l1_image_lambda']*l1_image_loss
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
@@ -192,7 +164,8 @@ def main():
 
     # DEFINE SUMMARIES
     with tf.name_scope('summary'):
-        _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('generator_loss', (fake_image_loss+fake_latent_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('discriminator_loss', discriminator_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -228,10 +201,13 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
-        gan_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
-        optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
-        gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars+gan_vars)
-        optimize = optimizer.apply_gradients(gv, name='optimize')
+        discriminator_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
+        g_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
+        g_gv = g_optimizer.compute_gradients(loss=generator_loss, var_list=encoder_vars)
+        g_optimize = g_optimizer.apply_gradients(g_gv, name='optimize')
+        d_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
+        d_gv = d_optimizer.compute_gradients(loss=discriminator_loss, var_list=discriminator_vars)
+        d_optimize = d_optimizer.apply_gradients(d_gv, name='optimize')
 
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
     train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
@@ -239,7 +215,8 @@ def main():
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
-        iter_scalar_summary, _ = sess.run([scalar_summary, optimize])
+        _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
+        iter_scalar_summary, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
