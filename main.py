@@ -214,14 +214,16 @@ def main():
         d_optimize = d_optimizer.apply_gradients(d_gv, name='d_optimize')
 
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
-    train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
+    train_summary_writer_d = tf.summary.FileWriter(base_option['result_dir']+'/summary/train/d')
+    train_summary_writer_g = tf.summary.FileWriter(base_option['result_dir']+'/summary/train/g')
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
-        _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
-        iter_scalar_summary, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
-        train_summary_writer.add_summary(iter_scalar_summary, iter)
+        iter_scalar_summary_d, _ = sess.run([scalar_summary, d_optimize]) # UPDATE DISCRIMINATORS
+        iter_scalar_summary_g, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
+        train_summary_writer_d.add_summary(iter_scalar_summary_d, iter)
+        train_summary_writer_g.add_summary(iter_scalar_summary_g, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
