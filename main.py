@@ -134,7 +134,9 @@ def main():
             fake_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_image_discrimination), encoded_image_discrimination)
             real_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_image_discrimination), real_image_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_image_discrimination), encoded_image_discrimination)
             image_gan_loss = fake_image_loss + real_image_loss
-            _ = tf.summary.scalar('image_gan_loss', tf.reduce_mean(image_gan_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            print("IMG SHAPE")
+            print(image_gan_loss.shape)
+            _ = tf.summary.scalar('image_gan_loss', tf.squeeze(image_gan_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += image_gan_loss
 
             latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=4, latent_size=18*512)
@@ -143,7 +145,9 @@ def main():
             fake_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
             real_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination)
             latent_gan_loss = fake_latent_loss + real_latent_loss
-            _ = tf.summary.scalar('latent_gan_loss', tf.reduce_mean(latent_gan_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            print("LAT SHAPE")
+            print(latent_gan_loss.shape)
+            _ = tf.summary.scalar('latent_gan_loss', tf.squeeze(latent_gan_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += latent_gan_loss
 
         if base_option['vgg_lambda']:
