@@ -138,8 +138,8 @@ def main():
             total_loss += image_gan_loss
 
             latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=4, latent_size=18*512)
-            encoded_latent_discrimination = latent_discriminator.get_output_for(tf.keras.layers.flatten(encoded_latents), None)
-            real_latent_discrimination = latent_discriminator.get_output_for(tf.keras.layers.flatten(latents), None)
+            encoded_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(encoded_latents, [-1,18*512]), None)
+            real_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(latents, [-1,18*512]), None)
             fake_latent_loss = tf.kears.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
             real_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination)
             latent_gan_loss = fake_latent_loss + real_latent_loss
