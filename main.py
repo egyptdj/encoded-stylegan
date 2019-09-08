@@ -127,6 +127,25 @@ def main():
         mse = tf.keras.losses.MeanSquaredError()
         mae = tf.keras.losses.MeanAbsoluteError()
 
+        with tf.name_scope('gan_loss'):
+            image_discriminator = tflib.Network("Dimg", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024)
+            encoded_image_discrimination = image_discriminator(encoded_images, None)
+            real_image_discrimination = image_discriminator(images, None)
+            fake_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(encoded_image_discrimination), encoded_image_discrimination)
+            real_image_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_image_discrimination), real_image_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_image_discrimination), encoded_image_discrimination)
+            image_gan_loss = fake_image_loss + real_image_loss
+            _ = tf.summary.scalar('image_gan_loss', image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += image_gan_loss
+
+            latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_styelgan.G_mapping', dlatent_size=1)
+            encoded_latent_discrimination = latent_discriminator(encoded_latents, None)
+            real_latent_discrimination = latent_discriminator(latents, None)
+            fake_latent_loss = tf.kears.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
+            real_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination)
+            latent_gan_loss = fake_latent_loss + real_latent_loss
+            _ = tf.summary.scalar('latent_gan_loss', latent_gan_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += latent_gan_loss
+
         if base_option['vgg_lambda']:
             image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
             image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
@@ -205,8 +224,9 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
+        gan_vars = tf.trainable_vars('gan_loss')
         optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
-        gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
+        gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars+gan_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
 
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
