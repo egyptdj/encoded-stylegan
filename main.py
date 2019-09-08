@@ -225,7 +225,6 @@ def main():
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
         gan_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
-        print(gan_vars)
         optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
         gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars+gan_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
