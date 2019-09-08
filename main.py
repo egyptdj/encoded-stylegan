@@ -200,8 +200,12 @@ def main():
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
-        encoder_vars = tf.trainable_variables('encoder')
-        discriminator_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
+        t_vars = tf.trainable_variables()
+        encoder_vars = [var for var in t_vars if 'encoder' in var.name]
+        discriminator_vars = [var for var in t_vars if (('Dlat' in var.name) or ('Dimg' in var.name))]
+        print (discriminator_vars)
+        # encoder_vars = tf.trainable_variables('encoder')
+        # discriminator_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
         g_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
         g_gv = g_optimizer.compute_gradients(loss=generator_loss, var_list=encoder_vars)
         g_optimize = g_optimizer.apply_gradients(g_gv, name='optimize')
