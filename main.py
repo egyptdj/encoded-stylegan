@@ -137,9 +137,9 @@ def main():
             _ = tf.summary.scalar('image_gan_loss', image_gan_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += image_gan_loss
 
-            latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1)
-            encoded_latent_discrimination = latent_discriminator.get_output_for(encoded_latents, None)
-            real_latent_discrimination = latent_discriminator.get_output_for(latents, None)
+            latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=4, latent_size=18*512)
+            encoded_latent_discrimination = latent_discriminator.get_output_for(tf.keras.layers.flatten(encoded_latents), None)
+            real_latent_discrimination = latent_discriminator.get_output_for(tf.keras.layers.flatten(latents), None)
             fake_latent_loss = tf.kears.losses.binary_crossentropy(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
             real_latent_loss = tf.keras.losses.binary_crossentropy(tf.ones_like(real_latent_discrimination), real_latent_discrimination) + tf.keras.losses.binary_crossentropy(tf.zeros_like(encoded_latent_discrimination), encoded_latent_discrimination)
             latent_gan_loss = fake_latent_loss + real_latent_loss
@@ -224,7 +224,8 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
-        gan_vars = tf.trainable_vars('gan_loss')
+        gan_vars = tf.trainable_vars('Dlat')+tf.trainable_vars('Dimg')
+        print(gan_vars)
         optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
         gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars+gan_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
