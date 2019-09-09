@@ -203,34 +203,31 @@ def main():
         t_vars = tf.trainable_variables()
         encoder_vars = [var for var in t_vars if 'encoder' in var.name]
         discriminator_vars = [var for var in t_vars if (('Dlat' in var.name) or ('Dimg' in var.name))]
-        print (discriminator_vars)
         # encoder_vars = tf.trainable_variables('encoder')
         # discriminator_vars = tf.trainable_variables('Dlat')+tf.trainable_variables('Dimg')
-        g_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='g_optimizer')
+        g_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate_g'], name='g_optimizer')
         g_gv = g_optimizer.compute_gradients(loss=generator_loss, var_list=encoder_vars)
         g_optimize = g_optimizer.apply_gradients(g_gv, name='g_optimize')
-        d_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='d_optimizer')
+        d_optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate_d'], name='d_optimizer')
         d_gv = d_optimizer.compute_gradients(loss=discriminator_loss, var_list=discriminator_vars)
         d_optimize = d_optimizer.apply_gradients(d_gv, name='d_optimize')
 
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
-    train_summary_writer_d = tf.summary.FileWriter(base_option['result_dir']+'/summary/train/d')
-    train_summary_writer_g = tf.summary.FileWriter(base_option['result_dir']+'/summary/train/g')
+    train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
-        iter_scalar_summary_d, _ = sess.run([scalar_summary, d_optimize]) # UPDATE DISCRIMINATORS
-        iter_scalar_summary_g, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
-        train_summary_writer_d.add_summary(iter_scalar_summary_d, iter)
-        train_summary_writer_g.add_summary(iter_scalar_summary_g, iter)
+        for _ in range(base_option['discriminator_update']):
+            _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
+        iter_scalar_summary, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
+        train_summary_writer.add_summary(iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
             val_iter_image_summary = sess.run(test_image_summary, feed_dict=val_feed_dict)
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
-
 
 
 if __name__=='__main__':
