@@ -53,6 +53,35 @@ def main():
     latent_encoded_smile += 2.0 * latent_smile
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
 
+    with tf.name_scope('metric'):
+        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+
+    # DEFINE GRAPH NEEDED FOR TESTING
+    with tf.name_scope("test_encode"):
+        # G_synth_test = Gs.components.synthesis.clone()
+        test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
+        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
+        latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
+        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
+
+        tf.add_to_collection('TEST_NODES', test_image_input)
+        tf.add_to_collection('TEST_NODES', test_encoded_latent)
+        tf.add_to_collection('TEST_NODES', test_recovered_image)
+        tf.add_to_collection('TEST_NODES', latent_manipulator)
+
+        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
+        assert len(image_list)>0
+
+        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
+        val_feed_dict = {test_image_input: val_imbatch}
+        val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
+        val_ssim = tf.reduce_mean(tf.image.ssim(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
+        _ = tf.summary.scalar('psnr', val_psnr, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('ssim', val_ssim, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
+        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
+
     with tf.name_scope('loss'):
         total_loss = 0.0
         mse = tf.keras.losses.MeanSquaredError()
@@ -94,35 +123,6 @@ def main():
             _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l1_image_lambda']*l1_image_loss
 
-    with tf.name_scope('metric'):
-        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-
-    # DEFINE GRAPH NEEDED FOR TESTING
-    with tf.name_scope("test_encode"):
-        # G_synth_test = Gs.components.synthesis.clone()
-        test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
-        latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
-        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
-
-        tf.add_to_collection('TEST_NODES', test_image_input)
-        tf.add_to_collection('TEST_NODES', test_encoded_latent)
-        tf.add_to_collection('TEST_NODES', test_recovered_image)
-        tf.add_to_collection('TEST_NODES', latent_manipulator)
-
-        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
-        assert len(image_list)>0
-
-        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
-        val_feed_dict = {test_image_input: val_imbatch}
-        val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
-        val_ssim = tf.reduce_mean(tf.image.ssim(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
-        _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
-        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
-
     # DEFINE SUMMARIES
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -150,7 +150,7 @@ def main():
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     for iter in tqdm(range(base_option['num_iter'])):
-        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize])
+        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict=val_feed_dict)
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
