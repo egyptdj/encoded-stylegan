@@ -1,3 +1,7 @@
+import numpy as np
+import tensorflow as tf
+from stylegan.training.networks_stylegan import *
+
 def encode(
     input,                              # First input: Images [minibatch, channel, height, width].
     out_shape           = [18, 512],
