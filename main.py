@@ -71,8 +71,9 @@ def main():
 
         if base_option['encoding_lambda'] and base_option['dataset_generated']:
             encoding_loss = mse(latents, encoded_latents)
+            fine_encoding_loss = mse(latents[base_option['fine_encoding_layer']:,...], encoded_latents[base_option['fine_encoding_layer']:,...])
             _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['encoding_lambda']*encoding_loss
+            total_loss += base_option['encoding_lambda']*encoding_loss + base_option['encoding_lambda']*base_option['fine_encoding_lambda']*fine_encoding_loss
 
         if base_option['lpips_lambda']:
             lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
