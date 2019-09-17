@@ -30,7 +30,10 @@ def main():
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
-        noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
+        if base_option['uniform_noise']:
+            noise_latents = tf.random.uniform(([base_option['minibatch_size']] + Gs.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
+        else:
+            noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
         images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
         latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
         encoded_latents = encode(images, reuse=False)
@@ -47,6 +50,7 @@ def main():
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
+
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
     latent_encoded_smile = tf.identity(encoded_latents)
