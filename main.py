@@ -162,7 +162,7 @@ def main():
     tflib.tfutil.init_uninitialized_vars()
     lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
-        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict=dict(learning_rate=lr))
+        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr})
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%1000==0 and not iter==0: lr *= 0.99
