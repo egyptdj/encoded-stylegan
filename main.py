@@ -64,7 +64,10 @@ def main():
 
     # DEFINE GRAPH NEEDED FOR TESTING
     with tf.name_scope("test_encode"):
+        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
+        assert len(image_list)>0
         val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
+
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder_with_default(val_imbatch, tf.float32, [None,1024,1024,3], name='image_input')
         test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
@@ -75,9 +78,6 @@ def main():
         tf.add_to_collection('TEST_NODES', test_encoded_latent)
         tf.add_to_collection('TEST_NODES', test_recovered_image)
         tf.add_to_collection('TEST_NODES', latent_manipulator)
-
-        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
-        assert len(image_list)>0
 
         val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
         val_ssim = tf.reduce_mean(tf.image.ssim(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
@@ -104,7 +104,7 @@ def main():
 
         if base_option['encoding_lambda'] and base_option['dataset_generated']:
             encoding_loss = mse(latents, encoded_latents)
-            cut_index = base_option['fine_encoding_layer']
+            # cut_index = base_option['fine_encoding_layer']
             # fine_encoding_loss = mse(latents[:,cut_index:,:], encoded_latents[:,cut_index:,...])
             fine_encoding_loss = tf.reduce_sum([pow(base_option['gradient_base'],i)*mse(latents[:,cut_index:,:], encoded_latents[:,cut_index:,...]) for i, cut_index in enumerate(range(18))])
             _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
