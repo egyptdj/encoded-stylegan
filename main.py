@@ -66,7 +66,7 @@ def main():
     with tf.name_scope("test_encode"):
         image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
         assert len(image_list)>0
-        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
+        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0).astype(np.float32)/255.0
 
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder_with_default(val_imbatch, [None,1024,1024,3], name='image_input')
