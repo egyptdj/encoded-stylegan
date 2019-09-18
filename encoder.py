@@ -6,6 +6,7 @@ def encode(
     input,                              # First input: Images [minibatch, channel, height, width].
     out_shape           = [18, 512],
     reuse               = False,
+    scope               = 'encoder',
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,           # Input resolution. Overridden based on dataset.
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
@@ -32,7 +33,7 @@ def encode(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
     out_fmap = np.prod(out_shape)
 
-    with tf.variable_scope('encoder', reuse=reuse):
+    with tf.variable_scope(scope, reuse=reuse):
         input.set_shape([None, num_channels, resolution, resolution])
         input = tf.cast(input, dtype)
         lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)

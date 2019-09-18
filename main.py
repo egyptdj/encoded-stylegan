@@ -20,13 +20,12 @@ def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
-    try:
-        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    except:
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+    url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+    with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
+    num_encoder = base_option['num_encoder']
+    assert 18%num_encoder==0
+    out_shape = [18//num_encoder, 512]
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
@@ -36,7 +35,7 @@ def main():
             noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
         images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
         latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-        encoded_latents = encode(images, reuse=False)
+        encoded_latents = tf.concat([encode(images, out_shape=out_shape, scope='encoder_{}'.format(i), reuse=False) for i in range(num_encoder)], axis=1)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
@@ -46,7 +45,7 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        encoded_latents = encode(images, reuse=False)
+        encoded_latents = tf.concat([encode(images, out_shape=out_shape, scope='encoder_{}'.format(i), reuse=False) for i in range(num_encoder)], axis=1)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
@@ -65,7 +64,7 @@ def main():
     with tf.name_scope("test_encode"):
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
+        test_encoded_latent = tf.concat([encode(tf.transpose(test_image_input, perm=[0,3,1,2]), out_shape=out_shape, scope='encoder_{}'.format(i), reuse=True) for i in range(num_encoder)], axis=1)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
@@ -144,12 +143,13 @@ def main():
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
-        encoder_vars = tf.trainable_variables('encoder')
+        vars = tf.global_variables()
+        encoder_vars = [v for v in vars if 'encoder' in v.name]
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
         gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
 
-    saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
+    saver = tf.train.Saver(var_list=encoder_vars, name='saver')
     train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
