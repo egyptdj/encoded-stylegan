@@ -198,7 +198,7 @@ def main():
             train_summary_writer.add_summary(iter_image_summary, iter)
             val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch})
             val_summary_writer.add_summary(val_iter_image_summary, iter)
-            saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
+            # saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
 
 
 
