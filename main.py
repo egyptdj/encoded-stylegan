@@ -64,7 +64,7 @@ def main():
                         noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
                     latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                     images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-                    encoded_latents = encode(images, reuse=False)
+                    encoded_latents = encode(images, reuse=bool(gpu_idx))
                     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                 else:
                     # LOAD FFHQ DATASET
@@ -74,7 +74,7 @@ def main():
                     ffhq.configure(base_option['minibatch_size'])
                     images, _ = ffhq.get_minibatch_tf()
                     images = tf.cast(images, tf.float32)/255.0
-                    encoded_latents = encode(images, reuse=False)
+                    encoded_latents = encode(images, reuse=bool(gpu_idx))
                     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
                 recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
