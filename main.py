@@ -98,32 +98,32 @@ def main():
                     encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
                     encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
                     vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
-                    _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('vgg_loss{}'.format(gpu_idx), vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['vgg_lambda']*vgg_loss
 
                 if base_option['encoding_lambda'] and base_option['dataset_generated']:
                     encoding_loss = mse(latents, encoded_latents)
-                    _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('encoding_loss{}'.format(gpu_idx), encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['encoding_lambda']*encoding_loss
 
                 if base_option['lpips_lambda']:
                     lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
-                    _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('lpips_loss{}'.format(gpu_idx), lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['lpips_lambda']*lpips_loss
 
                 if base_option['l2_lambda']:
                     l2_loss = mse(images, encoded_images)
-                    _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('l2_loss{}'.format(gpu_idx), l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['l2_lambda']*l2_loss
 
                 if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
                     l1_latent_loss = mae(latents, encoded_latents)
-                    _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('l1_latent_loss{}'.format(gpu_idx), l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['l1_latent_lambda']*l1_latent_loss
 
                 if base_option['l1_image_lambda']:
                     l1_image_loss = mae(images, encoded_images)
-                    _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    _ = tf.summary.scalar('l1_image_loss{}'.format(gpu_idx), l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['l1_image_lambda']*l1_image_loss
 
         # DEFINE OPTIMIZERS
