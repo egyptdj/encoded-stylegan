@@ -16,50 +16,124 @@ from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
 
 
+def average_gradients(tower_grads):
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+    # Note that each grad_and_vars looks like the following:
+    #   ((grad0_gpu0, var0_gpu0), ... , (grad0_gpuN, var0_gpuN))
+    grads = []
+    for g, _ in grad_and_vars:
+        # Add 0 dimension to the gradients to represent the tower.
+        expanded_g = tf.expand_dims(g, 0)
+
+        # Append on a 'tower' dimension which we will average over below.
+        grads.append(expanded_g)
+
+    # Average over the 'tower' dimension.
+    grad = tf.concat(axis=0, values=grads)
+    grad = tf.reduce_mean(grad, 0)
+
+    # Keep in mind that the Variables are redundant because they are shared
+    # across towers. So .. we will just return the first tower's pointer to
+    # the Variable.
+    v = grad_and_vars[0][1]
+    grad_and_var = (grad, v)
+    average_grads.append(grad_and_var)
+    return average_grads
+
+
 def main():
     base_option = utils.option.parse()
 
     tflib.init_tf()
-    try:
-        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    except:
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+    url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+    with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
-    if base_option['dataset_generated']:
-        # DEFINE NODES
-        print("SAMPLING DATASET FROM THE GENERATOR")
-        if base_option['uniform_noise']:
-            noise_latents = tf.random.uniform(([base_option['minibatch_size']] + Gs.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
-        else:
-            noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
-        images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-        latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-        encoded_latents = encode(images, reuse=False)
-        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-    else:
-        # LOAD FFHQ DATASET
-        print("LOADING FFHQ DATASET")
-        from stylegan.training import dataset
-        ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
-        ffhq.configure(base_option['minibatch_size'])
-        images, _ = ffhq.get_minibatch_tf()
-        images = tf.cast(images, tf.float32)/255.0
-        encoded_latents = encode(images, reuse=False)
-        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
 
-    recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
+    for gpu_idx in range(base_option['num_gpus']):
+        with tf.device('/gpu:{}'.format(gpu_idx)):
+            with tf.name_scope('model_gpu{}'.format(gpu_idx)):
+                if base_option['dataset_generated']:
+                    # DEFINE NODES
+                    print("SAMPLING DATASET FROM THE GENERATOR")
+                    if base_option['uniform_noise']:
+                        noise_latents = tf.random.uniform(([base_option['minibatch_size']] + Gs.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
+                    else:
+                        noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
+                    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                    latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
+                    encoded_latents = encode(images, reuse=False)
+                    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                else:
+                    # LOAD FFHQ DATASET
+                    print("LOADING FFHQ DATASET")
+                    from stylegan.training import dataset
+                    ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
+                    ffhq.configure(base_option['minibatch_size'])
+                    images, _ = ffhq.get_minibatch_tf()
+                    images = tf.cast(images, tf.float32)/255.0
+                    encoded_latents = encode(images, reuse=False)
+                    encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
-    # LOAD LATENT DIRECTIONS
-    latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
-    latent_encoded_smile = tf.identity(encoded_latents)
-    latent_encoded_smile += 2.0 * latent_smile
-    smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
+                recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
 
-    with tf.name_scope('metric'):
-        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+                # LOAD LATENT DIRECTIONS
+                latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
+                latent_encoded_smile = tf.identity(encoded_latents)
+                latent_encoded_smile += 2.0 * latent_smile
+                smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
+
+            with tf.name_scope('loss_gpu{}'.format(gpu_idx)):
+                total_loss = 0.0
+                mse = tf.keras.losses.MeanSquaredError()
+                mae = tf.keras.losses.MeanAbsoluteError()
+
+                if base_option['vgg_lambda']:
+                    image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+                    image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
+                    image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
+                    encoded_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
+                    encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
+                    encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
+                    vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
+                    _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['vgg_lambda']*vgg_loss
+
+                if base_option['encoding_lambda'] and base_option['dataset_generated']:
+                    encoding_loss = mse(latents, encoded_latents)
+                    _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['encoding_lambda']*encoding_loss
+
+                if base_option['lpips_lambda']:
+                    lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
+                    _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['lpips_lambda']*lpips_loss
+
+                if base_option['l2_lambda']:
+                    l2_loss = mse(images, encoded_images)
+                    _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['l2_lambda']*l2_loss
+
+                if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
+                    l1_latent_loss = mae(latents, encoded_latents)
+                    _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['l1_latent_lambda']*l1_latent_loss
+
+                if base_option['l1_image_lambda']:
+                    l1_image_loss = mae(images, encoded_images)
+                    _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+                    total_loss += base_option['l1_image_lambda']*l1_image_loss
+
+        # DEFINE OPTIMIZERS
+        with tf.name_scope('optimize_gpu{}'.format(gpu_idx)):
+            encoder_vars = tf.trainable_variables('encoder')
+            gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
+            tf.add_to_collection('GRADIENTS', gv)
+
+    average_grad = average_gradients(tf.get_collection('GRADIENTS'))
+    optimize = optimizer.apply_gradients(average_grad, name='optimize')
 
     # DEFINE GRAPH NEEDED FOR TESTING
     with tf.name_scope("test_encode"):
@@ -85,49 +159,11 @@ def main():
         _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY', 'VAL_IMAGE_SUMMARY'])
         original_image_summary = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
 
-    with tf.name_scope('loss'):
-        total_loss = 0.0
-        mse = tf.keras.losses.MeanSquaredError()
-        mae = tf.keras.losses.MeanAbsoluteError()
-
-        if base_option['vgg_lambda']:
-            image_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
-            image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
-            image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
-            encoded_vgg = Vgg16('/media/bispl/dbx/Dropbox/Academic/01_Research/99_DATASET/VGG16_MODEL/vgg16.npy')
-            encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
-            encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
-            vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
-            _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['vgg_lambda']*vgg_loss
-
-        if base_option['encoding_lambda'] and base_option['dataset_generated']:
-            encoding_loss = mse(latents, encoded_latents)
-            _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['encoding_lambda']*encoding_loss
-
-        if base_option['lpips_lambda']:
-            lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
-            _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['lpips_lambda']*lpips_loss
-
-        if base_option['l2_lambda']:
-            l2_loss = mse(images, encoded_images)
-            _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l2_lambda']*l2_loss
-
-        if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
-            l1_latent_loss = mae(latents, encoded_latents)
-            _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l1_latent_lambda']*l1_latent_loss
-
-        if base_option['l1_image_lambda']:
-            l1_image_loss = mae(images, encoded_images)
-            _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-            total_loss += base_option['l1_image_lambda']*l1_image_loss
-
     # DEFINE SUMMARIES
-    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
+    with tf.name_scope('metric'):
+        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('learning_rate', learning_rate, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -141,13 +177,6 @@ def main():
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         test_scalar_summary = tf.summary.merge(tf.get_collection('TEST_SCALAR_SUMMARY'))
         val_image_summary = tf.summary.merge(tf.get_collection('VAL_IMAGE_SUMMARY'))
-
-    # DEFINE OPTIMIZERS
-    with tf.name_scope('optimize'):
-        encoder_vars = tf.trainable_variables('encoder')
-        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
-        gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
-        optimize = optimizer.apply_gradients(gv, name='optimize')
 
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
     train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
