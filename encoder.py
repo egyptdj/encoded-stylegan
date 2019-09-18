@@ -5,7 +5,7 @@ from stylegan.training.networks_stylegan import *
 def encode(
     input,                              # First input: Images [minibatch, channel, height, width].
     out_shape           = [18, 512],
-    scope               = 'encoder'
+    scope               = 'encoder',
     reuse               = False,
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,           # Input resolution. Overridden based on dataset.
