@@ -127,7 +127,9 @@ def main():
             total_loss += base_option['l1_image_lambda']*l1_image_loss
 
     # DEFINE SUMMARIES
+    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     with tf.name_scope('summary'):
+        _ = tf.summary.scalar('learning_rate', learning_rate, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('total_loss', total_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -143,7 +145,7 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
-        optimizer = tf.train.AdamOptimizer(learning_rate=base_option['learning_rate'], name='optimizer')
+        optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
         gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
 
@@ -154,14 +156,17 @@ def main():
     tflib.tfutil.init_uninitialized_vars()
     original_image_summary = sess.run(original_image_summary, feed_dict={test_image_input: val_imbatch})
     val_summary_writer.add_summary(original_image_summary)
+    lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
-        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict=val_feed_dict)
+        if iter%1000==0 and not iter==0:
+            lr *= 0.99
+        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr, test_image_input: val_imbatch})
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
-            val_iter_image_summary = sess.run(val_image_summary)
+            val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch})
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
 
