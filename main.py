@@ -127,11 +127,11 @@ def main():
                     # _ = tf.summary.scalar('l1_image_loss{}'.format(gpu_idx), l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
                     total_loss += base_option['l1_image_lambda']*l1_image_loss
 
-        # DEFINE OPTIMIZERS
-        with tf.name_scope('optimize_gpu{}'.format(gpu_idx)):
-            encoder_vars = tf.trainable_variables('encoder')
-            gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
-            tf.add_to_collection('GRADIENTS', gv)
+            # DEFINE OPTIMIZERS
+            with tf.name_scope('optimize_gpu{}'.format(gpu_idx)):
+                encoder_vars = tf.trainable_variables('encoder')
+                gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
+                tf.add_to_collection('GRADIENTS', gv)
 
     average_grad = average_gradients(tf.get_collection('GRADIENTS'))
     optimize = optimizer.apply_gradients(average_grad, name='optimize')
