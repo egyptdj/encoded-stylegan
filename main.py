@@ -78,13 +78,12 @@ def main():
         assert len(image_list)>0
 
         val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
-        val_feed_dict = {test_image_input: val_imbatch}
         val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
         val_ssim = tf.reduce_mean(tf.image.ssim(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
         _ = tf.summary.scalar('psnr', val_psnr, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', val_ssim, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
-        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
+        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY', 'VAL_IMAGE_SUMMARY'])
+        original_image_summary = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
 
     with tf.name_scope('loss'):
         total_loss = 0.0
@@ -139,7 +138,7 @@ def main():
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         test_scalar_summary = tf.summary.merge(tf.get_collection('TEST_SCALAR_SUMMARY'))
-        test_image_summary = tf.summary.merge(tf.get_collection('TEST_IMAGE_SUMMARY'))
+        val_image_summary = tf.summary.merge(tf.get_collection('VAL_IMAGE_SUMMARY'))
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
@@ -153,6 +152,8 @@ def main():
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
+    original_image_summary = sess.run(original_image_summary, feed_dict={test_image_input: val_imbatch})
+    val_summary_writer.add_summary(original_image_summary)
     for iter in tqdm(range(base_option['num_iter'])):
         iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict=val_feed_dict)
         train_summary_writer.add_summary(iter_scalar_summary, iter)
@@ -160,7 +161,7 @@ def main():
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
-            val_iter_image_summary = sess.run(test_image_summary, feed_dict=val_feed_dict)
+            val_iter_image_summary = sess.run(val_image_summary)
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
 
