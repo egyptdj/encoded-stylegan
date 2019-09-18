@@ -51,6 +51,7 @@ def main():
 
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer')
+    tf.config.set_soft_device_placement(True)
 
     for gpu_idx in range(base_option['num_gpus']):
         with tf.device('/gpu:{}'.format(gpu_idx)):
