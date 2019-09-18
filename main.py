@@ -62,8 +62,8 @@ def main():
                         noise_latents = tf.random.uniform(([base_option['minibatch_size']] + Gs.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
                     else:
                         noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
-                    images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-                    latents = tf.get_default_graph().get_tensor_by_name('Gs_{}/G_mapping/dlatents_out:0'.format(gpu_idx+1))
+                    latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+                    images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                     encoded_latents = encode(images, reuse=False)
                     encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
                 else:
