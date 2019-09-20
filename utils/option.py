@@ -8,6 +8,7 @@ def parse():
     parser.add_argument('-g', '--num_gpus', type=int, default=None, help='number of GPUs to use')
     parser.add_argument('-b', '--minibatch_size', type=int, default=4, help='number of data to place in a minibatch')
     parser.add_argument('-u', '--uniform_noise', type=bool, default=False, help='use uniform noise')
+    parser.add_argument('-r', '--noise_range', type=float, default=1.0, help='noise range')
     parser.add_argument('-du', '--discriminator_update', type=int, default=1, help='number of discriminator update per generator update')
     parser.add_argument('-ml', '--mapping_layers', type=int, default=8, help='number of latent discriminator layers')
     parser.add_argument('-lG', '--learning_rate_g', type=float, default=1e-3, help='learning rate of the encoder training')
