@@ -163,7 +163,7 @@ def main():
     for iter in tqdm(range(base_option['num_iter'])):
         for _ in range(base_option['discriminator_update']):
             _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
-        iter_scalar_summary, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
+        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, g_optimize]) # UPDATE GENERATORS
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
