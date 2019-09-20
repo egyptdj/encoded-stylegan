@@ -9,80 +9,11 @@ import PIL.Image
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 from tqdm import tqdm
 from vgg import Vgg16
+from encoder import encode
 from lpips import lpips_tf
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
-
-
-def encode(
-    input,                              # First input: Images [minibatch, channel, height, width].
-    out_shape           = [18, 512],
-    reuse               = False,
-    num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
-    resolution          = 1024,           # Input resolution. Overridden based on dataset.
-    label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
-    fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
-    fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
-    fmap_max            = 512,          # Maximum number of feature maps in any layer.
-    nonlinearity        = 'lrelu',      # Activation function: 'relu', 'lrelu',
-    use_wscale          = True,         # Enable equalized learning rate?
-    mbstd_group_size    = 4,            # Group size for the minibatch standard deviation layer, 0 = disable.
-    mbstd_num_features  = 1,            # Number of features for the minibatch standard deviation layer.
-    dtype               = 'float32',    # Data type to use for activations and outputs.
-    fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
-    blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
-    structure           = 'fixed',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
-    is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
-    **_kwargs):                         # Ignore unrecognized keyword args.
-
-    resolution_log2 = int(np.log2(resolution))
-    assert resolution == 2**resolution_log2 and resolution >= 4
-    assert isinstance(out_shape, list) or isinstance(out_shape, tuple)
-    def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
-    def blur(x): return blur2d(x, blur_filter) if blur_filter else x
-    if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
-    act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
-    out_fmap = np.prod(out_shape)
-
-    with tf.variable_scope('encoder', reuse=reuse):
-        input.set_shape([None, num_channels, resolution, resolution])
-        input = tf.cast(input, dtype)
-        lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
-        output = None
-
-        # Building blocks.
-        def fromrgb(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
-                x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
-                return x
-        def block(x, res): # res = 2..resolution_log2
-            with tf.variable_scope('%dx%d' % (2**res, 2**res)):
-                if res >= 3: # 8x8 and up
-                    with tf.variable_scope('Conv0'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Conv1_down'):
-                        x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
-                else: # 4x4
-                    if mbstd_group_size > 1:
-                        x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
-                    with tf.variable_scope('Conv'):
-                        x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense0'):
-                        x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
-                    with tf.variable_scope('Dense1'):
-                        x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
-                        x = tf.reshape(x, [-1]+out_shape)
-                return x
-
-        x = fromrgb(input, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            x = block(x, res)
-        output = block(x, 2)
-
-        assert output.dtype == tf.as_dtype(dtype)
-        output = tf.identity(output, name='output')
-    return output
 
 
 def main():
@@ -99,10 +30,13 @@ def main():
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
-        noise_latents = tf.random_normal([base_option['minibatch_size']] + Gs.input_shape[1:])
-        images = Gs.get_output_for(noise_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-        latents = tf.get_default_graph().get_tensor_by_name('Gs_1/G_mapping/dlatents_out:0')
-        encoded_latents = encode(images, reuse=False)
+        if base_option['uniform_noise']:
+            noise_latents = tf.random.uniform(([base_option['minibatch_size']] + Gs.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
+        else:
+            noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
+        latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, normalize_latents=False)
+        images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        encoded_latents = encode(images, reuse=False, nonlinearity='lrelu', use_wscale=True, mbstd_group_size=4, mbstd_num_features=1, fused_scale='auto', blur_filter = [1,2,1])
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
@@ -112,15 +46,44 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        encoded_latents = encode(images, reuse=False)
+        encoded_latents = encode(images, reuse=False, nonlinearity='lrelu', use_wscale=True, mbstd_group_size=4, mbstd_num_features=1, fused_scale='auto', blur_filter = [1,2,1])
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
+
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
     latent_encoded_smile = tf.identity(encoded_latents)
     latent_encoded_smile += 2.0 * latent_smile
     smile_encoded_images = Gs.components.synthesis.get_output_for(latent_encoded_smile, None, is_validation=True, use_noise=True, randomize_noise=True)
+
+    with tf.name_scope('metric'):
+        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+
+    # DEFINE GRAPH NEEDED FOR TESTING
+    with tf.name_scope("test_encode"):
+        # G_synth_test = Gs.components.synthesis.clone()
+        test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
+        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity='lrelu', use_wscale=True, mbstd_group_size=4, mbstd_num_features=1, fused_scale='auto', blur_filter = [1,2,1])
+        latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
+        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
+
+        tf.add_to_collection('TEST_NODES', test_image_input)
+        tf.add_to_collection('TEST_NODES', test_encoded_latent)
+        tf.add_to_collection('TEST_NODES', test_recovered_image)
+        tf.add_to_collection('TEST_NODES', latent_manipulator)
+
+        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
+        assert len(image_list)>0
+
+        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
+        val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
+        val_ssim = tf.reduce_mean(tf.image.ssim(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
+        _ = tf.summary.scalar('psnr', val_psnr, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('ssim', val_ssim, family='metrics', collections=['TEST_SUMMARY', 'TEST_SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY', 'VAL_IMAGE_SUMMARY'])
+        original_image_summary = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY', 'TEST_IMAGE_SUMMARY'])
 
     with tf.name_scope('loss'):
         generator_loss = 0.0
@@ -160,11 +123,8 @@ def main():
             _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             generator_loss += base_option['l1_image_lambda']*l1_image_loss
 
-    with tf.name_scope('metric'):
-        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-
     # DEFINE SUMMARIES
+    learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('generator_loss', (fake_image_loss+fake_latent_loss), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('discriminator_loss', discriminator_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -176,29 +136,8 @@ def main():
         _ = tf.summary.image('recovered_smile', tf.clip_by_value(tf.transpose(smile_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
-        summary = tf.summary.merge_all()
-
-    # DEFINE GRAPH NEEDED FOR TESTING
-    with tf.name_scope("test_encode"):
-        # G_synth_test = Gs.components.synthesis.clone()
-        test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True)
-        latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
-        test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
-
-        tf.add_to_collection('TEST_NODES', test_image_input)
-        tf.add_to_collection('TEST_NODES', test_encoded_latent)
-        tf.add_to_collection('TEST_NODES', test_recovered_image)
-        tf.add_to_collection('TEST_NODES', latent_manipulator)
-
-        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
-        assert len(image_list)>0
-
-        val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
-        val_feed_dict = {test_image_input: val_imbatch}
-        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(test_recovered_image, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=64, family='images', collections=['TEST_SUMMARY'])
-        _ = tf.summary.image('original', test_image_input, max_outputs=64, family='images', collections=['TEST_SUMMARY'])
-        test_image_summary = tf.summary.merge(tf.get_collection('TEST_SUMMARY'))
+        test_scalar_summary = tf.summary.merge(tf.get_collection('TEST_SCALAR_SUMMARY'))
+        val_image_summary = tf.summary.merge(tf.get_collection('VAL_IMAGE_SUMMARY'))
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
@@ -219,15 +158,19 @@ def main():
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
+    original_image_summary = sess.run(original_image_summary, feed_dict={test_image_input: val_imbatch})
+    val_summary_writer.add_summary(original_image_summary)
+    lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
         for _ in range(base_option['discriminator_update']):
             _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
         iter_scalar_summary, _ = sess.run([scalar_summary, g_optimize]) # UPDATE GENERATORS
         train_summary_writer.add_summary(iter_scalar_summary, iter)
+        val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
             iter_image_summary = sess.run(image_summary)
             train_summary_writer.add_summary(iter_image_summary, iter)
-            val_iter_image_summary = sess.run(test_image_summary, feed_dict=val_feed_dict)
+            val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch})
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
 
