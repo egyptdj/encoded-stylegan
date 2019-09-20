@@ -99,7 +99,7 @@ def main():
             real_image_loss = 0.5 * mse(tf.ones_like(real_image_discrimination), real_image_discrimination) \
                 + 0.5 * mse(tf.zeros_like(encoded_image_discrimination), encoded_image_discrimination)
 
-            latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=base_option['mapping_layers'], latent_size=18*512)
+            latent_discriminator = tflib.Network("Dlat", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=base_option['mapping_layers'], latent_size=18*512, normalize_latents=False)
             encoded_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(encoded_latents, [-1,18*512]), None)
             real_latent_discrimination = latent_discriminator.get_output_for(tf.reshape(latents, [-1,18*512]), None)
             fake_latent_loss = 0.5 * mse(tf.ones_like(encoded_latent_discrimination), encoded_latent_discrimination)
