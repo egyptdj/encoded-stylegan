@@ -160,7 +160,6 @@ def main():
     tflib.tfutil.init_uninitialized_vars()
     original_image_summary = sess.run(original_image_summary, feed_dict={test_image_input: val_imbatch})
     val_summary_writer.add_summary(original_image_summary)
-    lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
         for _ in range(base_option['discriminator_update']):
             _ = sess.run([d_optimize]) # UPDATE DISCRIMINATORS
