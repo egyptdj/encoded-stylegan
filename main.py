@@ -12,6 +12,7 @@ from vgg import Vgg16
 from encoder import encode
 from regularizer import modeseek
 from lpips import lpips_tf
+from laploss import laploss
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
@@ -111,6 +112,11 @@ def main():
             lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
             _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['lpips_lambda']*lpips_loss
+
+        if base_option['laploss_lambda']:
+            lap_loss =  tf.reduce_mean(laploss.laploss(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
+            _ = tf.summary.scalar('lap_loss', lap_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['laploss_lambda']*lap_loss
 
         if base_option['l2_lambda']:
             l2_loss = mse(images, encoded_images)
