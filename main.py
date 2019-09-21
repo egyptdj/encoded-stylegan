@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 from tqdm import tqdm
 from vgg import Vgg16
 from encoder import encode
+from regularizer import modeseek
 from lpips import lpips_tf
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
@@ -126,6 +127,12 @@ def main():
             _ = tf.summary.scalar('l1_image_loss', l1_image_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l1_image_lambda']*l1_image_loss
 
+        if base_option['modeseek']:
+            modeseek_reg = base_option['modeseek'] * modeseek(encoded_images, encoded_latents)
+            _ = tf.summary.scalar('modeseek_regularize', modeseek_reg, family='regularizer', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['modeseek']*modeseek_reg
+
+
     # DEFINE SUMMARIES
     learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
     with tf.name_scope('summary'):
@@ -158,8 +165,7 @@ def main():
     val_summary_writer.add_summary(original_image_summary)
     lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
-        if iter%1000==0 and not iter==0:
-            lr *= 0.99
+        if iter%1000==0 and not iter==0: lr *= 0.99
         iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr, test_image_input: val_imbatch})
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
