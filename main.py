@@ -99,12 +99,16 @@ def main():
             encoded_image_d = discriminator.get_output_for(ffhq_images, ffhq_encoded_latents_flat)
             generated_image_d = discriminator.get_output_for(images, latents_flat)
 
-            d_fake_loss = 0.5 * mse(tf.zeros_like(generated_image_d), generated_image_d)
-            d_real_loss = 0.5 * mse(tf.ones_like(encoded_image_d), encoded_image_d)
+            # d_fake_loss = 0.5 * mse(tf.zeros_like(generated_image_d), generated_image_d)
+            # d_real_loss = 0.5 * mse(tf.ones_like(encoded_image_d), encoded_image_d)
+            d_fake_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(generated_image_d), generated_image_d)
+            d_real_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(encoded_image_d), encoded_image_d)
             d_loss = d_fake_loss+d_real_loss
 
-            g_fake_loss = 0.5 * mse(tf.ones_like(generated_image_d), generated_image_d)
-            g_real_loss = 0.5 * mse(tf.zeros_like(encoded_image_d), encoded_image_d)
+            # g_fake_loss = 0.5 * mse(tf.ones_like(generated_image_d), generated_image_d)
+            # g_real_loss = 0.5 * mse(tf.zeros_like(encoded_image_d), encoded_image_d)
+            g_fake_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_image_d), generated_image_d)
+            g_real_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(encoded_image_d), encoded_image_d)
             g_loss = g_fake_loss+g_real_loss
 
             _ = tf.summary.scalar('discriminator_loss', d_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
