@@ -37,6 +37,7 @@ def main():
         noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
     latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, normalize_latents=False)
     images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+    encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
     if bool(base_option['blur_filter']): blur = [1,2,1]
     else: blur=None
 
@@ -47,7 +48,7 @@ def main():
     ffhq.configure(base_option['minibatch_size'])
     ffhq_images, _ = ffhq.get_minibatch_tf()
     ffhq_images = tf.cast(ffhq_images, tf.float32)/255.0
-    ffhq_encoded_latents = encode(ffhq_images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+    ffhq_encoded_latents = encode(ffhq_images, reuse=True, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
     ffhq_encoded_images = Gs.components.synthesis.get_output_for(ffhq_encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(ffhq_encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
@@ -95,9 +96,12 @@ def main():
         with tf.name_scope('gan_loss'):
             ffhq_encoded_latents_flat = tf.reshape(ffhq_encoded_latents, [-1,18*512])
             latents_flat = tf.reshape(latents, [-1,18*512])
+            encoded_latents_flat = tf.reshape(encoded_latents, [-1,18*512])
             discriminator = tflib.Network("discriminator", func_name='stylegan.training.networks_stylegan.D_basic', label_size=ffhq_encoded_latents_flat.shape.as_list()[1], num_channels=3, resolution=1024, structure='fixed')
             encoded_image_d = discriminator.get_output_for(ffhq_images, ffhq_encoded_latents_flat)
             generated_image_d = discriminator.get_output_for(images, latents_flat)
+            encoded_image_g = discriminator.get_output_for(recovered_encoded_images, ffhq_encoded_latents_flat)
+            generated_image_g = discriminator.get_output_for(images, encoded_latents_flat)
 
             # d_fake_loss = 0.5 * mse(tf.zeros_like(generated_image_d), generated_image_d)
             # d_real_loss = 0.5 * mse(tf.ones_like(encoded_image_d), encoded_image_d)
@@ -107,8 +111,8 @@ def main():
 
             # g_fake_loss = 0.5 * mse(tf.ones_like(generated_image_d), generated_image_d)
             # g_real_loss = 0.5 * mse(tf.zeros_like(encoded_image_d), encoded_image_d)
-            g_fake_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_image_d), generated_image_d)
-            g_real_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(encoded_image_d), encoded_image_d)
+            g_fake_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_image_g), generated_image_g)
+            g_real_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(encoded_image_g), encoded_image_g)
             g_loss = g_fake_loss+g_real_loss
 
             _ = tf.summary.scalar('discriminator_loss', d_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
