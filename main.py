@@ -38,7 +38,9 @@ def main():
             noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
         latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, normalize_latents=False)
         images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=base_option['blur_filter'])
+        if bool(base_option['blur_filter']): blur = [1,2,1]
+        else: blur=None
+        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
@@ -48,7 +50,7 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, _ = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=base_option['blur_filter'])
+        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
 
     recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
@@ -67,7 +69,7 @@ def main():
     with tf.name_scope("test_encode"):
         # G_synth_test = Gs.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity='lrelu', use_wscale=True, mbstd_group_size=4, mbstd_num_features=1, fused_scale='auto', blur_filter = [1,2,1])
+        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = Gs.components.synthesis.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
 
