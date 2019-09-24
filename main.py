@@ -101,8 +101,6 @@ def main():
             discriminator = tflib.Network("discriminator", func_name='stylegan.training.networks_stylegan.D_basic', label_size=ffhq_encoded_latents_flat.shape.as_list()[1], num_channels=3, resolution=1024, structure='fixed')
             encoded_image_d = discriminator.get_output_for(ffhq_images, ffhq_encoded_latents_flat)
             generated_image_d = discriminator.get_output_for(images, latents_flat)
-            encoded_image_g = discriminator.get_output_for(recovered_encoded_images, ffhq_encoded_latents_flat)
-            generated_image_g = discriminator.get_output_for(images, encoded_latents_flat)
 
             # d_fake_loss = 0.5 * mse(tf.zeros_like(generated_image_d), generated_image_d)
             # d_real_loss = 0.5 * mse(tf.ones_like(encoded_image_d), encoded_image_d)
@@ -112,8 +110,8 @@ def main():
 
             # g_fake_loss = 0.5 * mse(tf.ones_like(generated_image_d), generated_image_d)
             # g_real_loss = 0.5 * mse(tf.zeros_like(encoded_image_d), encoded_image_d)
-            g_fake_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_image_g), generated_image_g)
-            g_real_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(encoded_image_g), encoded_image_g)
+            g_fake_loss = tf.losses.sigmoid_cross_entropy(tf.ones_like(generated_image_d), generated_image_d)
+            g_real_loss = tf.losses.sigmoid_cross_entropy(tf.zeros_like(encoded_image_d), encoded_image_d)
             g_loss = g_fake_loss+g_real_loss
 
             _ = tf.summary.scalar('discriminator_loss', d_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -185,11 +183,13 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
+        print(encoder_vars)
         g_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='g_optimizer')
         g_gv = g_optimizer.compute_gradients(loss=g_loss, var_list=encoder_vars)
         g_optimize = g_optimizer.apply_gradients(g_gv, name='g_optimize')
 
         discriminator_vars = tf.trainable_variables('discriminator')
+        print(discriminator_vars)
         d_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='d_optimizer')
         d_gv = d_optimizer.compute_gradients(loss=d_loss, var_list=discriminator_vars)
         d_optimize = d_optimizer.apply_gradients(d_gv, name='d_optimize')
@@ -204,6 +204,7 @@ def main():
     lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
         if iter%1000==0 and not iter==0: lr *= 0.99
+        _ = sess.run(d_optimize, feed_dict={learning_rate: lr})
         _ = sess.run(d_optimize, feed_dict={learning_rate: lr})
         _ = sess.run(g_optimize, feed_dict={learning_rate: lr})
         iter_scalar_summary, val_iter_scalar_summary = sess.run([scalar_summary, test_scalar_summary], feed_dict={learning_rate: lr, test_image_input: val_imbatch})
