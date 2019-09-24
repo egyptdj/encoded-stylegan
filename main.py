@@ -110,6 +110,11 @@ def main():
             _ = tf.summary.scalar('encoding_loss', encoding_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['encoding_lambda']*encoding_loss
 
+        if base_option['encoding_sigmoid_lambda'] and base_option['dataset_generated']:
+            encoding_sigmoid_loss = tf.losses.sigmoid_cross_entropy(latents, encoded_latents)
+            _ = tf.summary.scalar('encoding_sigmoid_loss', encoding_sigmoid_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['encoding_sigmoid_lambda']*encoding_sigmoid_loss
+
         if base_option['lpips_lambda']:
             lpips_loss =  tf.reduce_mean(lpips_tf.lpips(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1])))
             _ = tf.summary.scalar('lpips_loss', lpips_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
