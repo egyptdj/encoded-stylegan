@@ -24,7 +24,7 @@ def parse():
     parser.add_argument('-mbstd', '--mbstd_group_size', type=int, default=4, help='mbstd group size')
     parser.add_argument('-mbfeat', '--mbstd_num_features', type=int, default=1, help='mbstd num features')
     parser.add_argument('-blur', '--blur_filter', type=bool, default=False, help='blur filter')
-    parser.add_argument('-fs', '--fused_scale', type=str, default='auto', help='nonlinearity [lrelu/relu]')
+    parser.add_argument('-fs', '--fused_scale', type=str, default='auto', help='fused scale')
     parser.add_argument('-dT', '--dataset_generated', type=bool, default=False, help='generated dataset or FFHQ')
     parser.add_argument('-dD', '--data_dir', type=str, default='/media/bispl/workdisk/FFHQ_flickrface/tfrecords', help='directory path to load dataset')
     parser.add_argument('-dV', '--validation_dir', type=str, default='images/validation', help='directory path to load dataset')

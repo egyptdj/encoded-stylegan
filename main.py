@@ -29,6 +29,9 @@ def main():
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
         with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
+    if bool(base_option['blur_filter']): blur = [1,2,1]
+    else: blur=None
+
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
@@ -38,8 +41,6 @@ def main():
             noise_latents = tf.random.normal(([base_option['minibatch_size']] + Gs.input_shape[1:]), stddev=1.0*base_option['noise_range'])
         latents = Gs.components.mapping.get_output_for(noise_latents, None, is_validation=True, normalize_latents=False)
         images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
-        if bool(base_option['blur_filter']): blur = [1,2,1]
-        else: blur=None
         encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
     else:
