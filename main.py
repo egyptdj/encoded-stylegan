@@ -32,6 +32,7 @@ def main():
     if bool(base_option['blur_filter']): blur = [1,2,1]
     else: blur=None
 
+
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
@@ -43,18 +44,23 @@ def main():
         images = Gs.components.synthesis.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
         encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
     else:
         # LOAD FFHQ DATASET
         print("LOADING FFHQ DATASET")
         from stylegan.training import dataset
         ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
         ffhq.configure(base_option['minibatch_size'])
-        images, _ = ffhq.get_minibatch_tf()
-        images = tf.cast(images, tf.float32)/255.0
+        # images, _ = ffhq.get_minibatch_tf()
+        get_images, _ = ffhq.get_minibatch_tf()
+        image_input = tf.placeholder(tf.uint8, [base_option['minibatch_size'],3,1024,1024])
+        images = tf.cast(image_input, tf.float32)/255.0
         encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
-        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        searchlight = tf.Variable(tf.zeros([base_option['minibatch_size'],18,512]), trainable=True, name='searchlight')
+        searchlight_images = Gs.components.synthesis.get_output_for(searchlight, None, is_validation=True, use_noise=True, randomize_noise=True)
+        encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
+        recovered_encoded_images = encoded_images
 
-    recovered_encoded_images = Gs.components.synthesis.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
 
     # LOAD LATENT DIRECTIONS
     latent_smile = tf.stack([tf.cast(tf.constant(np.load('latents/smile.npy'), name='latent_smile'), tf.float32)]*base_option['minibatch_size'], axis=0)
@@ -92,8 +98,15 @@ def main():
 
     with tf.name_scope('loss'):
         total_loss = 0.0
+        searchlight_embedding_loss = 0.0
         mse = tf.keras.losses.MeanSquaredError()
         mae = tf.keras.losses.MeanAbsoluteError()
+
+        if base_option['searchlight_lambda'] and not base_option['dataset_generated']:
+            searchlight_init = tf.assign(searchlight, tf.zeros_like(searchlight))
+            searchlight_loss = mae(searchlight, encoded_latents)
+            _ = tf.summary.scalar('searchlight_loss', searchlight_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            total_loss += base_option['searchlight_lambda']*searchlight_loss
 
         if base_option['vgg_lambda']:
             image_vgg = Vgg16(base_option['cache_dir']+'/vgg16.npy')
@@ -105,6 +118,13 @@ def main():
             vgg_loss = tf.reduce_sum([mse(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
             _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['vgg_lambda']*vgg_loss
+
+            searchlight_vgg = Vgg16(base_option['cache_dir']+'/vgg16.npy')
+            searchlight_vgg.build(tf.image.resize(tf.transpose(searchlight_images, perm=[0,2,3,1]), [224,224]))
+            searchlight_perception = [searchlight_vgg.conv1_1, searchlight_vgg.conv1_2, searchlight_vgg.conv3_2, searchlight_vgg.conv4_2]
+            searchlight_vgg_loss = tf.reduce_sum([mse(image, sl) for image, sl in zip(image_perception, searchlight_perception)])
+            _ = tf.summary.scalar('searchlight_vgg_loss', searchlight_vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            searchlight_embedding_loss += searchlight_vgg_loss
 
         if base_option['encoding_lambda'] and base_option['dataset_generated']:
             encoding_loss = mse(latents, encoded_latents)
@@ -131,6 +151,10 @@ def main():
             _ = tf.summary.scalar('l2_loss', l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
             total_loss += base_option['l2_lambda']*l2_loss
 
+            searchlight_l2_loss = mse(images, searchlight_images)
+            _ = tf.summary.scalar('searchlight_l2_loss', searchlight_l2_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+            searchlight_embedding_loss += searchlight_l2_loss
+
         if base_option['l1_latent_lambda'] and base_option['dataset_generated']:
             l1_latent_loss = mae(latents, encoded_latents)
             _ = tf.summary.scalar('l1_latent_loss', l1_latent_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -155,9 +179,10 @@ def main():
         _ = tf.summary.scalar('psnr', psnr, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.image('encoded', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        if base_option['dataset_generated']: _ = tf.summary.image('encoded', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('recovered(withnoise)', tf.clip_by_value(tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('recovered_smile', tf.clip_by_value(tf.transpose(smile_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.image('searchlight_image', tf.clip_by_value(tf.transpose(searchlight_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         test_scalar_summary = tf.summary.merge(tf.get_collection('TEST_SCALAR_SUMMARY'))
@@ -170,6 +195,10 @@ def main():
         gv = optimizer.compute_gradients(loss=total_loss, var_list=encoder_vars)
         optimize = optimizer.apply_gradients(gv, name='optimize')
 
+        searchlight_optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='searchlight_optimizer')
+        searchlight_gv = searchlight_optimizer.compute_gradients(loss=searchlight_embedding_loss, var_list=searchlight)
+        searchlight_optimize = searchlight_optimizer.apply_gradients(searchlight_gv, name='searchlight_optimize')
+
     saver = tf.train.Saver(var_list=tf.global_variables('encoder'), name='saver')
     train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
@@ -180,13 +209,17 @@ def main():
     lr = base_option['learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
         if iter%1000==0 and not iter==0: lr *= 0.99
-        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr, test_image_input: val_imbatch})
+        sess.run(searchlight_init)
+        im = sess.run(get_images)
+        for i in range(base_option['searchlight_iter']):
+            _ = sess.run(searchlight_optimize, feed_dict={learning_rate: 1e-1, image_input: im})
+        iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr, test_image_input: val_imbatch, image_input: im})
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
         if iter%base_option['save_iter']==0 or iter==0:
-            iter_image_summary = sess.run(image_summary)
+            iter_image_summary = sess.run(image_summary, feed_dict={image_input: im})
             train_summary_writer.add_summary(iter_image_summary, iter)
-            val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch})
+            val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch, image_input: im})
             val_summary_writer.add_summary(val_iter_image_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
 
