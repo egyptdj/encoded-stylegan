@@ -8,6 +8,7 @@ def parse():
     parser.add_argument('-nE', '--exp_name', type=str, default='exp', help='experiment name')
     parser.add_argument('-b', '--minibatch_size', type=int, default=4, help='number of data to place in a minibatch')
     parser.add_argument('-l', '--learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
+    parser.add_argument('-sl', '--search_learning_rate', type=float, default=1e-1, help='learning rate of the encoder training')
     parser.add_argument('-u', '--uniform_noise', type=bool, default=False, help='use random uniform noise for image generation')
     parser.add_argument('-nr', '--noise_range', type=float, default=0.0, help='noise range')
     parser.add_argument('-si', '--searchlight_iter', type=int, default=5, help='searchlight iteration per image')

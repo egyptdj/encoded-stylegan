@@ -212,7 +212,7 @@ def main():
         sess.run(searchlight_init)
         im = sess.run(get_images)
         for i in range(base_option['searchlight_iter']):
-            _ = sess.run(searchlight_optimize, feed_dict={learning_rate: 1e-1, image_input: im})
+            _ = sess.run(searchlight_optimize, feed_dict={learning_rate: base_option['search_learning_rate'], image_input: im})
         iter_scalar_summary, val_iter_scalar_summary, _ = sess.run([scalar_summary, test_scalar_summary, optimize], feed_dict={learning_rate: lr, test_image_input: val_imbatch, image_input: im})
         train_summary_writer.add_summary(iter_scalar_summary, iter)
         val_summary_writer.add_summary(val_iter_scalar_summary, iter)
