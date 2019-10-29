@@ -18,7 +18,6 @@ from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
 
-
 def main():
     base_option = utils.option.parse()
     tf.random.set_random_seed(base_option['seed'])
@@ -34,6 +33,7 @@ def main():
     if bool(base_option['blur_filter']): blur = [1,2,1]
     else: blur=None
 
+    empty_label = tf.constant(value=[], shape=[base_option['minibatch_size'], 0])
     if base_option['dataset_generated']:
         # DEFINE NODES
         print("SAMPLING DATASET FROM THE GENERATOR")
@@ -42,9 +42,9 @@ def main():
             latents = tf.random.uniform(([base_option['minibatch_size']] + generator.input_shape[1:]), -1.0*base_option['noise_range'], 1.0*base_option['noise_range'])
         else:
             latents = tf.random.normal(([base_option['minibatch_size']] + generator.input_shape[1:]), stddev=1.0*base_option['noise_range'])
-        images = generator.get_output_for(latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        images = generator.get_output_for(latents, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
         encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
-        encoded_images = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        encoded_images = generator.get_output_for(encoded_latents, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
         print("LOADING FFHQ DATASET")
@@ -52,17 +52,17 @@ def main():
         generator = Gs.clone(name='generator')
         ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
         ffhq.configure(base_option['minibatch_size'])
-        images, _ = ffhq.get_minibatch_tf()
+        images, labels = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
         encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
-        encoded_images = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+        encoded_images = generator.get_output_for(encoded_latents, labels, is_validation=True, use_noise=False, randomize_noise=False)
         """ images is the X and Y domain,
             encoded_latents is the z domain,
             encoder is the mapping E,
             generator is the mapping D,
             encoded_images is the DEx domain """
 
-    recovered_encoded_images = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=True, randomize_noise=True)
+    recovered_encoded_images = generator.get_output_for(encoded_latents, empty_label, is_validation=True, use_noise=True, randomize_noise=True)
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
@@ -70,19 +70,19 @@ def main():
 
     # DEFINE GRAPH NEEDED FOR TESTING
     with tf.name_scope("test_encode"):
+        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
+        assert len(image_list)>0
         # G_synth_test = generator.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
         test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
-        test_recovered_image = generator.get_output_for(test_encoded_latent+latent_manipulator, None, is_validation=True, use_noise=True, randomize_noise=False)
+        test_recovered_image = generator.get_output_for(test_encoded_latent+latent_manipulator, empty_label, is_validation=True, use_noise=True, randomize_noise=False)
 
         tf.add_to_collection('TEST_NODES', test_image_input)
         tf.add_to_collection('TEST_NODES', test_encoded_latent)
         tf.add_to_collection('TEST_NODES', test_recovered_image)
         tf.add_to_collection('TEST_NODES', latent_manipulator)
 
-        image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
-        assert len(image_list)>0
 
         val_imbatch = np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0)/255.0
         val_psnr = tf.reduce_mean(tf.image.psnr(test_image_input, tf.transpose(test_recovered_image, perm=[0,2,3,1]), 1.0))
@@ -121,8 +121,8 @@ def main():
             fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
             real_latent = tf.identity(encoded_latents, name='z_real')
 
-            fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
-            real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
+            fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), empty_label)
+            real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), empty_label)
 
             with tf.name_scope("fake_loss"):
                 fake_latent_loss = tf.losses.compute_weighted_loss(\
@@ -142,7 +142,7 @@ def main():
                 with tf.name_scope('gradient_penalty'):
                     epsilon = tf.random.uniform([], name='epsilon')
                     gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='gradient_latent')
-                    critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
+                    critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), empty_label)
                     gradients = tf.gradients(critic_gradient_out, gradient_latent, name='gradients')
                     gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                     gradient_penalty = tf.square(gradients_norm -1)
@@ -151,13 +151,12 @@ def main():
             z_critic_fake_loss = -fake_latent_loss
 
         with tf.name_scope('y_domain_loss'):
-            image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure='fixed')
-            fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)
+            image_critic = tflib.Network("y_critic", func_name='progan.networks.D_paper', num_channels=3, resolution=1024, structure=None)
+            fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
             real_image = tf.identity(images, name='y_real')
 
-            fake_image_critic_out = image_critic.get_output_for(fake_image, None)
-            real_image_critic_out = image_critic.get_output_for(real_image, None)
-
+            fake_image_critic_out, _ = image_critic.get_output_for(fake_image, empty_label)
+            real_image_critic_out, _ = image_critic.get_output_for(real_image, empty_label)
             with tf.name_scope("fake_loss"):
                 fake_image_loss = tf.losses.compute_weighted_loss(\
                     losses=fake_image_critic_out, \
@@ -176,7 +175,7 @@ def main():
                 with tf.name_scope('gradient_penalty'):
                     epsilon = tf.random.uniform([], name='epsilon')
                     gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='gradient_image')
-                    critic_gradient_out = image_critic.get_output_for(gradient_image, None)
+                    critic_gradient_out, _ = image_critic.get_output_for(gradient_image, empty_label)
                     gradients = tf.gradients(critic_gradient_out, gradient_image, name='gradients')
                     gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                     gradient_penalty = tf.square(gradients_norm -1)
@@ -219,29 +218,28 @@ def main():
     with tf.name_scope('optimize'):
         encoder_vars = tf.trainable_variables('encoder')
         print("================== ENCODER VARS ==================")
-        print([v.name for v in encoder_vars])
+        print("\n".join([v.name for v in encoder_vars]))
         encoder_optimizer = tf.train.AdamOptimizer(learning_rate=encoder_learning_rate, name='encoder_optimizer')
         encoder_gv = encoder_optimizer.compute_gradients(loss=encoder_loss, var_list=encoder_vars)
         encoder_optimize = encoder_optimizer.apply_gradients(encoder_gv, name='encoder_optimize')
 
-        generator_vars = tf.trainable_variables('G_synthesis_2') + tf.trainable_variables('G_mapping_2')
-        import ipdb; ipdb.set_trace()
+        generator_vars = tf.trainable_variables('generator')
         print("================== GENERATOR VARS ==================")
-        print([v.name for v in generator_vars])
+        print("\n".join([v.name for v in generator_vars]))
         generator_optimizer = tf.train.AdamOptimizer(learning_rate=generator_learning_rate, name='generator_optimizer')
         generator_gv = generator_optimizer.compute_gradients(loss=generator_loss, var_list=generator_vars)
         generator_optimize = generator_optimizer.apply_gradients(generator_gv, name='generator_optimize')
 
         z_critic_vars = tf.trainable_variables('z_critic')
         print("================== Z_CRITIC VARS ==================")
-        print([v.name for v in z_critic_vars])
+        print("\n".join([v.name for v in z_critic_vars]))
         z_critic_optimizer = tf.train.AdamOptimizer(learning_rate=encoder_learning_rate, name='z_critic_optimizer')
         z_critic_gv = z_critic_optimizer.compute_gradients(loss=z_critic_loss, var_list=z_critic_vars)
         z_critic_optimize = z_critic_optimizer.apply_gradients(z_critic_gv, name='z_critic_optimize')
 
         y_critic_vars = tf.trainable_variables('y_critic')
         print("================== Y_CRITIC VARS ==================")
-        print([v.name for v in y_critic_vars])
+        print("\n".join([v.name for v in y_critic_vars]))
         y_critic_optimizer = tf.train.AdamOptimizer(learning_rate=generator_learning_rate, name='y_critic_optimizer')
         y_critic_gv = y_critic_optimizer.compute_gradients(loss=y_critic_loss, var_list=y_critic_vars)
         y_critic_optimize = y_critic_optimizer.apply_gradients(y_critic_gv, name='y_critic_optimize')
