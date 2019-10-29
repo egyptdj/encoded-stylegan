@@ -185,10 +185,10 @@ def main():
             y_critic_fake_loss = -fake_image_loss
 
         with tf.name_scope('final_losses'):
-            encoder_loss = regression_loss + z_critic_real_loss
-            generator_loss = regression_loss + y_critic_real_loss
-            z_critic_loss = tf.identity(z_critic_fake_loss)
-            y_critic_loss = tf.identity(y_critic_fake_loss)
+            encoder_loss = regression_loss + z_critic_fake_loss
+            generator_loss = regression_loss + y_critic_fake_loss
+            z_critic_loss = tf.identity(z_critic_real_loss)
+            y_critic_loss = tf.identity(y_critic_real_loss)
 
     # DEFINE SUMMARIES
     encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
