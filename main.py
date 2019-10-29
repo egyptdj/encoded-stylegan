@@ -24,7 +24,7 @@ def main():
     tf.random.set_random_seed(base_option['seed'])
 
     tflib.init_tf()
-    if progan:
+    if base_option['progan']:
         url = os.path.join(base_option['cache_dir'], 'karras2018iclr-celebahq-1024x1024.pkl')
         with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
     else:
@@ -97,7 +97,6 @@ def main():
         MAE = tf.keras.losses.MeanAbsoluteError()
 
         with tf.name_scope('regression_loss'):
-            regression_loss = 0.0
             regression_loss = 0.0
 
             # L2 Loss
@@ -226,6 +225,7 @@ def main():
         encoder_optimize = encoder_optimizer.apply_gradients(encoder_gv, name='encoder_optimize')
 
         generator_vars = tf.trainable_variables('G_synthesis_2') + tf.trainable_variables('G_mapping_2')
+        import ipdb; ipdb.set_trace()
         print("================== GENERATOR VARS ==================")
         print([v.name for v in generator_vars])
         generator_optimizer = tf.train.AdamOptimizer(learning_rate=generator_learning_rate, name='generator_optimizer')
