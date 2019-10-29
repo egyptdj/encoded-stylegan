@@ -27,6 +27,7 @@ def parse():
     parser.add_argument('-iN', '--num_iter', type=int, default=10000000, help='total number of iterations to train')
     parser.add_argument('-iC', '--critic_iter', type=int, default=1, help='total number of iterations to train')
     parser.add_argument('-iS', '--save_iter', type=int, default=1000, help='save model at every specified iterations')
+    parser.add_argument('--progan', action='store_true', help='use progan model')
     parser.add_argument('--seed', type=int, default=0, help='random state seed')
     opt_dict = vars(parser.parse_args())
 

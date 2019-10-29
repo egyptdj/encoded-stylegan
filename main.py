@@ -7,6 +7,7 @@ import tensorflow as tf
 import PIL.Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'progan'))
 from tqdm import tqdm
 from vgg import Vgg16
 from encoder import encode
@@ -23,10 +24,10 @@ def main():
     tf.random.set_random_seed(base_option['seed'])
 
     tflib.init_tf()
-    try:
-        url = os.path.join(base_option['cache_dir'], 'karras2019stylegan-ffhq-1024x1024.pkl')
+    if progan:
+        url = os.path.join(base_option['cache_dir'], 'karras2018iclr-celebahq-1024x1024.pkl')
         with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    except:
+    else:
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
         with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
 
