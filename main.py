@@ -62,7 +62,7 @@ def main():
             generator is the mapping D,
             encoded_images is the DEx domain """
 
-    recovered_encoded_images = generator.get_output_for(encoded_latents, empty_label, is_validation=True, use_noise=True, randomize_noise=True)
+    recovered_encoded_images = generator.get_output_for(encoded_latents, labels, is_validation=True, use_noise=False, randomize_noise=False)
 
     with tf.name_scope('metric'):
         psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
@@ -76,7 +76,7 @@ def main():
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
         test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
-        test_recovered_image = generator.get_output_for(test_encoded_latent+latent_manipulator, empty_label, is_validation=True, use_noise=True, randomize_noise=False)
+        test_recovered_image = generator.get_output_for(test_encoded_latent+latent_manipulator, tf.constant(value=[], shape=[len(image_list), 0]), is_validation=True)
 
         tf.add_to_collection('TEST_NODES', test_image_input)
         tf.add_to_collection('TEST_NODES', test_encoded_latent)
@@ -121,8 +121,8 @@ def main():
             fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
             real_latent = tf.identity(encoded_latents, name='z_real')
 
-            fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), empty_label)
-            real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), empty_label)
+            fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
+            real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
 
             with tf.name_scope("fake_loss"):
                 fake_latent_loss = tf.losses.compute_weighted_loss(\
@@ -142,7 +142,7 @@ def main():
                 with tf.name_scope('gradient_penalty'):
                     epsilon = tf.random.uniform([], name='epsilon')
                     gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='gradient_latent')
-                    critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), empty_label)
+                    critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
                     gradients = tf.gradients(critic_gradient_out, gradient_latent, name='gradients')
                     gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                     gradient_penalty = tf.square(gradients_norm -1)
@@ -151,12 +151,16 @@ def main():
             z_critic_fake_loss = -fake_latent_loss
 
         with tf.name_scope('y_domain_loss'):
-            image_critic = tflib.Network("y_critic", func_name='progan.networks.D_paper', num_channels=3, resolution=1024, structure=None)
-            fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+            if base_option['progan']:
+                image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=None)
+            else:
+                image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=None)
+
+            fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), labels, is_validation=True, use_noise=False, randomize_noise=False)
             real_image = tf.identity(images, name='y_real')
 
-            fake_image_critic_out, _ = image_critic.get_output_for(fake_image, empty_label)
-            real_image_critic_out, _ = image_critic.get_output_for(real_image, empty_label)
+            fake_image_critic_out = image_critic.get_output_for(fake_image, None)
+            real_image_critic_out = image_critic.get_output_for(real_image, None)
             with tf.name_scope("fake_loss"):
                 fake_image_loss = tf.losses.compute_weighted_loss(\
                     losses=fake_image_critic_out, \
@@ -175,7 +179,7 @@ def main():
                 with tf.name_scope('gradient_penalty'):
                     epsilon = tf.random.uniform([], name='epsilon')
                     gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='gradient_image')
-                    critic_gradient_out, _ = image_critic.get_output_for(gradient_image, empty_label)
+                    critic_gradient_out = image_critic.get_output_for(gradient_image, None)
                     gradients = tf.gradients(critic_gradient_out, gradient_image, name='gradients')
                     gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                     gradient_penalty = tf.square(gradients_norm -1)
