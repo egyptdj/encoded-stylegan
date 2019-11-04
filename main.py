@@ -62,11 +62,11 @@ def main():
             generator is the mapping D,
             encoded_images is the DEx domain """
 
-    recovered_encoded_images = generator.get_output_for(encoded_latents, labels, is_validation=True, use_noise=False, randomize_noise=False)
+    # recovered_encoded_images = generator.get_output_for(encoded_latents, labels, is_validation=True, use_noise=False, randomize_noise=False)
 
     with tf.name_scope('metric'):
-        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
-        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 1.0))
+        psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
+        ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
 
     # DEFINE GRAPH NEEDED FOR TESTING
     with tf.name_scope("test_encode"):
@@ -208,7 +208,7 @@ def main():
         _ = tf.summary.scalar('ssim', ssim, family='metrics', collections=['GENERATOR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('target', tf.clip_by_value(tf.transpose(images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.image('encoded', tf.clip_by_value(tf.transpose(encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(recovered_encoded_images, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
 
         encoder_summary = tf.summary.merge(tf.get_collection('ENCODER_SUMMARY'))
         generator_summary = tf.summary.merge(tf.get_collection('GENERATOR_SUMMARY'))
