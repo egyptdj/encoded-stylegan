@@ -19,7 +19,6 @@ def parse():
     parser.add_argument('-mbfeat', '--mbstd_num_features', type=int, default=1, help='mbstd num features')
     parser.add_argument('-blur', '--blur_filter', type=bool, default=False, help='blur filter')
     parser.add_argument('-fs', '--fused_scale', type=str, default='auto', help='fused scale')
-    parser.add_argument('-dT', '--dataset_generated', type=bool, default=False, help='generated dataset or FFHQ')
     parser.add_argument('-dD', '--data_dir', type=str, default='/media/bispl/workdisk/FFHQ_flickrface/tfrecords', help='directory path to load dataset')
     parser.add_argument('-dV', '--validation_dir', type=str, default='images/validation', help='directory path to load dataset')
     parser.add_argument('-dR', '--result_dir', type=str, default='results', help='directory path to save the trained model and/or the resulting image')
@@ -29,6 +28,7 @@ def parse():
     parser.add_argument('-iS', '--save_iter', type=int, default=1000, help='save model at every specified iterations')
     parser.add_argument('--progan', action='store_true', help='use progan model')
     parser.add_argument('--seed', type=int, default=0, help='random state seed')
+    parser.add_argument('--dataset_generated', action='store_true', help='generated dataset or FFHQ')
     opt_dict = vars(parser.parse_args())
 
     opt_dict['result_dir'] = os.path.join(opt_dict['result_dir'], opt_dict['exp_name'])
