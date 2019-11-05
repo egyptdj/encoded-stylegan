@@ -24,7 +24,7 @@ def main():
     tf.random.set_random_seed(base_option['seed'])
 
     tflib.init_tf()
-    url = os.path.join(base_option['cache_dir'], 'karras2018iclr-lsun-diningtable-256x256.pkl')
+    url = os.path.join(base_option['cache_dir'], 'karras2018iclr-lsun-dining_room-256x256.pkl')
     with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
 
     if bool(base_option['blur_filter']): blur = [1,2,1]
@@ -233,7 +233,6 @@ def main():
     generator_lr = base_option['generator_learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
         train_image_batch = sess.run(get_train_image)
-        iter_image_summary = sess.run(image_summary, feed_dict={image_input:train_image_batch})
         iter_encoder_summary, _ = sess.run([encoder_summary, encoder_optimize], feed_dict={image_input: train_image_batch, encoder_learning_rate: encoder_lr})
         for _ in range(base_option['critic_iter']):
             iter_z_critic_summary, _ = sess.run([z_critic_summary, z_critic_optimize], feed_dict={image_input: train_image_batch, encoder_learning_rate: encoder_lr})
@@ -242,7 +241,6 @@ def main():
         for _ in range(base_option['critic_iter']):
             iter_y_critic_summary, _ = sess.run([y_critic_summary, y_critic_optimize], feed_dict={image_input: train_image_batch, generator_learning_rate: generator_lr})
 
-        train_summary_writer.add_summary(iter_image_summary, iter)
         train_summary_writer.add_summary(iter_encoder_summary, iter)
         train_summary_writer.add_summary(iter_generator_summary, iter)
         train_summary_writer.add_summary(iter_z_critic_summary, iter)
@@ -250,6 +248,9 @@ def main():
 
         val_image_batch = sess.run(get_val_image)
         if iter%base_option['save_iter']==0 or iter==0:
+            iter_image_summary = sess.run(image_summary, feed_dict={image_input:train_image_batch})
+            train_summary_writer.add_summary(iter_image_summary, iter)
+
             val_summary = sess.run(full_summary, feed_dict={image_input:val_image_batch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
             val_summary_writer.add_summary(val_summary, iter)
             saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
