@@ -7,7 +7,7 @@ def encode(
     out_shape           = [512],
     reuse               = False,
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
-    resolution          = 1024,           # Input resolution. Overridden based on dataset.
+    resolution          = 256,           # Input resolution. Overridden based on dataset.
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
     fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
