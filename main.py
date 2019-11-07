@@ -10,13 +10,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'progan'))
 from tqdm import tqdm
 from vgg import Vgg16
-from encoder import encode
 from regularizer import modeseek
 from lpips import lpips_tf
 from laploss import laploss
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training.networks_stylegan import *
+from stylegan.training.misc import save_pkl
 
 def main():
     base_option = utils.option.parse()
@@ -43,7 +43,8 @@ def main():
         else:
             latents = tf.random.normal(([base_option['minibatch_size']] + generator.input_shape[1:]), stddev=1.0*base_option['noise_range'])
         images = generator.get_output_for(latents, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
-        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        encoder = tflib.Network("encoder", func_name='encoder.E_basic', nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        encoded_latents = encoder.get_output_for(images)
         encoded_images = generator.get_output_for(encoded_latents, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
     else:
         # LOAD FFHQ DATASET
@@ -54,7 +55,11 @@ def main():
         ffhq.configure(base_option['minibatch_size'])
         images, labels = ffhq.get_minibatch_tf()
         images = tf.cast(images, tf.float32)/255.0
-        encoded_latents = encode(images, reuse=False, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        if base_option['progan']:
+            encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        else:
+            encoder = tflib.Network("encoder", out_shape=[18, 512], func_name='encoder.E_basic', nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        encoded_latents = encoder.get_output_for(images)
         encoded_images = generator.get_output_for(encoded_latents, labels, is_validation=True, use_noise=False, randomize_noise=False)
         """ images is the X and Y domain,
             encoded_latents is the z domain,
@@ -74,7 +79,7 @@ def main():
         assert len(image_list)>0
         # G_synth_test = generator.components.synthesis.clone()
         test_image_input = tf.placeholder(tf.float32, [None,1024,1024,3], name='image_input')
-        test_encoded_latent = encode(tf.transpose(test_image_input, perm=[0,3,1,2]), reuse=True, nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
+        test_encoded_latent = encoder.get_output_for(tf.transpose(test_image_input, perm=[0,3,1,2]))
         latent_manipulator = tf.placeholder_with_default(tf.zeros_like(test_encoded_latent), test_encoded_latent.shape, name='latent_manipulator')
         test_recovered_image = generator.get_output_for(test_encoded_latent+latent_manipulator, tf.constant(value=[], shape=[len(image_list), 0]), is_validation=True)
 
@@ -248,7 +253,6 @@ def main():
         y_critic_gv = y_critic_optimizer.compute_gradients(loss=y_critic_loss, var_list=y_critic_vars)
         y_critic_optimize = y_critic_optimizer.apply_gradients(y_critic_gv, name='y_critic_optimize')
 
-    saver = tf.train.Saver(var_list=tf.global_variables('encoder')+tf.global_variables('generator')+tf.global_variables('z_critic')+tf.global_variables('y_critic'), name='saver')
     train_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/train')
     val_summary_writer = tf.summary.FileWriter(base_option['result_dir']+'/summary/validation')
     sess = tf.get_default_session()
@@ -276,7 +280,7 @@ def main():
             train_summary_writer.add_summary(iter_image_summary, iter)
             val_iter_image_summary = sess.run(val_image_summary, feed_dict={test_image_input: val_imbatch})
             val_summary_writer.add_summary(val_iter_image_summary, iter)
-            saver.save(sess, base_option['result_dir']+'/model/encoded_stylegan.ckpt')
+            save_pkl((encoder, generator, latent_critic, image_critic), base_option['result_dir']+'/model/model.pkl')
 
 
 
