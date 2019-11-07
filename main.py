@@ -45,6 +45,7 @@ def main():
     for gpu_idx in gpus:
         with tf.device('/gpu:{}'.format(gpu_idx)):
             with tf.name_scope('model_gpu{}'.format(gpu_idx)):
+                print("CONSTRUCTING MODEL WITH GPU: {}".format(gpu_idx))
 
                 if bool(base_option['blur_filter']): blur = [1,2,1]
                 else: blur=None
