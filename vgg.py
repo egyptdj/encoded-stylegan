@@ -56,12 +56,12 @@ class Vgg16:
         self.conv4_1 = self.conv_layer(self.pool3, "conv4_1")
         self.conv4_2 = self.conv_layer(self.conv4_1, "conv4_2")
         self.conv4_3 = self.conv_layer(self.conv4_2, "conv4_3")
-        self.pool4 = self.max_pool(self.conv4_3, 'pool4')
-
-        self.conv5_1 = self.conv_layer(self.pool4, "conv5_1")
-        self.conv5_2 = self.conv_layer(self.conv5_1, "conv5_2")
-        self.conv5_3 = self.conv_layer(self.conv5_2, "conv5_3")
-        self.pool5 = self.max_pool(self.conv5_3, 'pool5')
+        # self.pool4 = self.max_pool(self.conv4_3, 'pool4')
+        #
+        # self.conv5_1 = self.conv_layer(self.pool4, "conv5_1")
+        # self.conv5_2 = self.conv_layer(self.conv5_1, "conv5_2")
+        # self.conv5_3 = self.conv_layer(self.conv5_2, "conv5_3")
+        # self.pool5 = self.max_pool(self.conv5_3, 'pool5')
 
         # self.fc6 = self.fc_layer(self.pool5, "fc6")
         # assert self.fc6.get_shape().as_list()[1:] == [4096]
@@ -94,22 +94,22 @@ class Vgg16:
             relu = tf.nn.relu(bias)
             return relu
 
-    def fc_layer(self, bottom, name):
-        with tf.variable_scope(name):
-            shape = bottom.get_shape().as_list()
-            dim = 1
-            for d in shape[1:]:
-                dim *= d
-            x = tf.reshape(bottom, [-1, dim])
-
-            weights = self.get_fc_weight(name)
-            biases = self.get_bias(name)
-
-            # Fully connected layer. Note that the '+' operation automatically
-            # broadcasts the biases.
-            fc = tf.nn.bias_add(tf.matmul(x, weights), biases)
-
-            return fc
+    # def fc_layer(self, bottom, name):
+    #     with tf.variable_scope(name):
+    #         shape = bottom.get_shape().as_list()
+    #         dim = 1
+    #         for d in shape[1:]:
+    #             dim *= d
+    #         x = tf.reshape(bottom, [-1, dim])
+    #
+    #         weights = self.get_fc_weight(name)
+    #         biases = self.get_bias(name)
+    #
+    #         # Fully connected layer. Note that the '+' operation automatically
+    #         # broadcasts the biases.
+    #         fc = tf.nn.bias_add(tf.matmul(x, weights), biases)
+    #
+    #         return fc
 
     def get_conv_filter(self, name):
         return tf.constant(self.data_dict[name][0], name="filter")
@@ -117,5 +117,5 @@ class Vgg16:
     def get_bias(self, name):
         return tf.constant(self.data_dict[name][1], name="biases")
 
-    def get_fc_weight(self, name):
-        return tf.constant(self.data_dict[name][0], name="weights")
+    # def get_fc_weight(self, name):
+    #     return tf.constant(self.data_dict[name][0], name="weights")

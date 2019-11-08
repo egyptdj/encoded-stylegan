@@ -12,6 +12,7 @@ def parse():
     parser.add_argument('-lG', '--generator_learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
     parser.add_argument('-u', '--uniform_noise', type=bool, default=False, help='use random uniform noise for image generation')
     parser.add_argument('-nr', '--noise_range', type=float, default=1.0, help='noise range')
+    parser.add_argument('-sV', '--vgg_shape', type=int, default=224, help='vgg input reshape size')
     parser.add_argument('-lV', '--vgg_lambda', type=float, default=1.0, help='vgg perceptual coefficient')
     parser.add_argument('-l2', '--l2_lambda', type=float, default=1.0, help='l2 coefficient')
     parser.add_argument('-nlin', '--nonlinearity', type=str, default='lrelu', help='nonlinearity [lrelu/relu]')
