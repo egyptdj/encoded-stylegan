@@ -279,17 +279,19 @@ def main():
         for _ in range(base_option['critic_iter']):
             _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
 
-        train_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
-        train_summary_writer.add_summary(train_summary, iter)
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        train_summary_writer.add_summary(train_scalar_summary, iter)
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: val_labelbatch})
+        val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%base_option['save_iter']==0:
             train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
+            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_summary_writer.add_summary(val_image_summary, iter)
             if iter==0:
-                val_image_summary = sess.run(image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-                val_summary_writer.add_summary(val_image_summary, iter)
-            val_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-            val_summary_writer.add_summary(val_summary, iter)
+                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+                val_summary_writer.add_summary(val_original_image_summary, iter)
 
             save_pkl((encoder, generator, latent_critic, image_critic), base_option['result_dir']+'/model/model.pkl')
 
