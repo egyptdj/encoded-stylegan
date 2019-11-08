@@ -114,10 +114,10 @@ def main():
 
                     # VGG loss
                     image_vgg = Vgg16(base_option['cache_dir']+'/vgg16.npy')
-                    image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [224,224]))
+                    image_vgg.build(tf.transpose(images, perm=[0,2,3,1]))
                     image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
                     encoded_vgg = Vgg16(base_option['cache_dir']+'/vgg16.npy')
-                    encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [224,224]))
+                    encoded_vgg.build(tf.transpose(encoded_images, perm=[0,2,3,1]))
                     encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
                     vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
                     tf.add_to_collection('LOSS_VGG', vgg_loss)
