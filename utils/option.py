@@ -35,7 +35,7 @@ def parse():
 
     opt_dict['result_dir'] = os.path.join(opt_dict['result_dir'], opt_dict['exp_name'])
 
-    if not os.path.exists(opt_dict['result_dir']): os.makedirs(opt_dict['result_dir'])
+    os.makedirs(opt_dict['result_dir'], exist_ok=True)
     with open(os.path.join(opt_dict['result_dir'],"argv.csv"), 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerows(opt_dict.items())
