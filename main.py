@@ -50,11 +50,11 @@ def main():
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
-        image_input = tf.cast(tf.placeholder(tf.uint8, [None,3,1024,1024], name='image_input'), tf.float32)/255.0
+        image_input = tf.placeholder(tf.uint8, [None,3,1024,1024], name='image_input')
         gpu_image_input = tf.split(image_input, base_option['num_gpus'], axis=0)
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
-        Gs_beta = 0.5 ** tf.div(tf.cast(base_option['minibatch_size']*base_option['num_gpus'], tf.float32), 10000.0)
+        # Gs_beta = 0.5 ** tf.div(tf.cast(base_option['minibatch_size']*base_option['num_gpus'], tf.float32), 10000.0)
         tf.add_to_collection('KEY_NODES', image_input)
         tf.add_to_collection('KEY_NODES', empty_label)
         tf.add_to_collection('KEY_NODES', encoder_learning_rate)
@@ -120,7 +120,6 @@ def main():
                     encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
                     vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
                     tf.add_to_collection('LOSS_VGG', vgg_loss)
-                    # _ = tf.summary.scalar('vgg_loss', vgg_loss, family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
 
                     regression_loss += base_option['vgg_lambda']*vgg_loss
 
@@ -232,23 +231,24 @@ def main():
                     y_critic_optimizer.register_gradients(y_critic_loss, image_critic.trainables)
 
     with tf.name_scope('summary'):
-        _ = tf.summary.scalar('l2', tf.reduce_mean(tf.get_collection('LOSS_L2')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('vgg', tf.reduce_mean(tf.get_collection('LOSS_VGG')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('regression', tf.reduce_mean(tf.get_collection('LOSS_REGRESSION')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('image_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('psnr', tf.reduce_mean(tf.get_collection('METRIC_PSNR')), family='metric', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='metric', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('encoder', encoder_learning_rate, family='lr', collections=[tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=[tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('l2', tf.reduce_mean(tf.get_collection('LOSS_L2')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('vgg', tf.reduce_mean(tf.get_collection('LOSS_VGG')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('regression', tf.reduce_mean(tf.get_collection('LOSS_REGRESSION')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('image_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('psnr', tf.reduce_mean(tf.get_collection('METRIC_PSNR')), family='metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('encoder', encoder_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
+        val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
         full_summary = tf.summary.merge_all()
 
     # DEFINE OPTIMIZE OPS
@@ -278,18 +278,18 @@ def main():
         for _ in range(base_option['critic_iter']):
             _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
 
-        train_summary = sess.run(full_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        train_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_summary, iter)
 
         if iter%base_option['save_iter']==0:
+            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
+            train_summary_writer.add_summary(train_image_summary, iter)
             if iter==0:
                 val_image_summary = sess.run(image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-            else:
-                val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-            val_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+                val_summary_writer.add_summary(val_image_summary, iter)
+            val_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_summary_writer.add_summary(val_summary, iter)
 
-            val_summary_writer.add_summary(val_image_summary, iter)
-            val_summary_writer.add_summary(val_scalar_summary, iter)
             save_pkl((encoder, generator, latent_critic, image_critic), base_option['result_dir']+'/model/model.pkl')
 
 
