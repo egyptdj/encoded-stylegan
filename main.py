@@ -246,7 +246,7 @@ def main():
         _ = tf.summary.scalar('encoder', encoder_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=1, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
@@ -279,17 +279,19 @@ def main():
         for _ in range(base_option['critic_iter']):
             _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
 
-        train_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
-        train_summary_writer.add_summary(train_summary, iter)
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        train_summary_writer.add_summary(train_scalar_summary, iter)
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+        val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%base_option['save_iter']==0:
             train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
             if iter==0:
-                val_image_summary = sess.run(image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-                val_summary_writer.add_summary(val_image_summary, iter)
-            val_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
-            val_summary_writer.add_summary(val_summary, iter)
+                val_image_original_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch})
+                val_summary_writer.add_summary(val_image_original_summary, iter)
+            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_summary_writer.add_summary(val_image_summary, iter)
 
             save_pkl((encoder, generator, latent_critic, image_critic), base_option['result_dir']+'/model/model.pkl')
 
