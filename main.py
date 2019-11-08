@@ -39,18 +39,19 @@ def main():
     ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
     ffhq.configure(base_option['num_gpus']*base_option['minibatch_size'])
     get_images, get_labels = ffhq.get_minibatch_tf()
+    get_images = tf.cast(get_images, tf.float32)/255.0
     empty_label = tf.placeholder(tf.float32, shape=[None,0], name='empty_label')
     train_labelbatch = np.zeros([base_option['minibatch_size'],0], np.float32)
 
     # PREPARE VALIDATION IMAGE BATCH
     image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
     assert len(image_list)>0
-    val_imbatch = np.transpose(np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])
+    val_imbatch = np.transpose(np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
     val_labelbatch = np.zeros([len(image_list)//base_option['num_gpus'],0], np.float32)
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
-        image_input = tf.placeholder(tf.uint8, [None,3,1024,1024], name='image_input')
+        image_input = tf.placeholder(tf.float32, [None,3,1024,1024], name='image_input')
         gpu_image_input = tf.split(image_input, base_option['num_gpus'], axis=0)
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
