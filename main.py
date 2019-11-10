@@ -27,37 +27,37 @@ def main():
     tflib.init_tf()
     gpus = np.arange(base_option['num_gpus'])
 
-    if base_option['progan']:
-        url = os.path.join(base_option['cache_dir'], 'karras2018iclr-celebahq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    else:
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=base_option['cache_dir']) as f: _, _, Gs = pickle.load(f)
+    # LOAD LSUN DININGROOM DATASET
+    print("LOADING CELEBA DATASET")
+    import tensorflow_datasets as tfds
 
-    # LOAD DATASET
-    print("LOADING FFHQ DATASET")
-    ffhq = dataset.load_dataset(data_dir=base_option['data_dir'], tfrecord_dir='ffhq', verbose=False)
-    ffhq.configure(base_option['num_gpus']*base_option['minibatch_size'])
-    get_images, get_labels = ffhq.get_minibatch_tf()
-    get_images = tf.cast(get_images, tf.float32)/255.0
-    empty_label = tf.placeholder(tf.float32, shape=[None,0], name='empty_label')
-    train_labelbatch = np.zeros([base_option['minibatch_size'],0], np.float32)
+    def resize(height=base_option['resolution'], width=base_option['resolution']):
+        def transformation_func(x):
+            return tf.image.resize_with_crop_or_pad(x['image'], height, width)
+        return transformation_func
 
-    # PREPARE VALIDATION IMAGE BATCH
-    image_list = [image for image in os.listdir(base_option['validation_dir']) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
-    assert len(image_list)>0
-    val_imbatch = np.transpose(np.stack([np.array(PIL.Image.open(base_option['validation_dir']+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
-    val_labelbatch = np.zeros([len(image_list)//base_option['num_gpus'],0], np.float32)
+    dataset_builder = tfds.builder("celeb_a")
+    dataset_builder.download_and_prepare(download_dir=str(base_option['data_dir']))
+    dataset_train = dataset_builder.as_dataset(split="train")
+    dataset_train = dataset_train.map(resize())
+    dataset_train = dataset_train.repeat().shuffle(buffer_size=1024, seed=base_option['seed']).batch(base_option['minibatch_size'])
+    train_iterator = dataset_train.make_one_shot_iterator()
+    get_train_image = tf.transpose(tf.cast(train_iterator.get_next(), tf.float32), perm=[0,3,1,2])/255.0
+
+    dataset_val = dataset_builder.as_dataset(split="validation")
+    dataset_val = dataset_val.map(resize())
+    dataset_val = dataset_val.repeat().batch(base_option['minibatch_size'])
+    val_iterator = dataset_val.make_one_shot_iterator()
+    get_val_image = tf.transpose(tf.cast(val_iterator.get_next(), tf.float32), perm=[0,3,1,2])/255.0
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
-        image_input = tf.placeholder(tf.float32, [None,3,1024,1024], name='image_input')
+        image_input = tf.placeholder(tf.float32, [None,3,base_option['resolution'],base_option['resolution']], name='image_input')
         gpu_image_input = tf.split(image_input, base_option['num_gpus'], axis=0)
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
         # Gs_beta = 0.5 ** tf.div(tf.cast(base_option['minibatch_size']*base_option['num_gpus'], tf.float32), 10000.0)
         tf.add_to_collection('KEY_NODES', image_input)
-        tf.add_to_collection('KEY_NODES', empty_label)
         tf.add_to_collection('KEY_NODES', encoder_learning_rate)
         tf.add_to_collection('KEY_NODES', generator_learning_rate)
 
@@ -76,11 +76,12 @@ def main():
             # DEFINE ENCODER AND GENERATOR
             if bool(base_option['blur_filter']): blur = [1,2,1]
             else: blur=None
-            generator = Gs.clone(name='generator')
-            avg_generator = Gs.clone(name='avg_generator')
+
             if base_option['progan']:
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=base_option['resolution'], structure=None)
                 encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
             else:
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylogan.G_style', num_channels=3, resolution=base_option['resolution'], structure=None)
                 encoder = tflib.Network("encoder", out_shape=[18, 512], func_name='encoder.E_basic', nonlinearity=base_option['nonlinearity'], use_wscale=base_option['use_wscale'], mbstd_group_size=base_option['mbstd_group_size'], mbstd_num_features=base_option['mbstd_num_features'], fused_scale=base_option['fused_scale'], blur_filter=blur)
 
             # CONSTRUCT NETWORK
@@ -88,7 +89,7 @@ def main():
             encoded_latents = encoder.get_output_for(images)
             if gpu_idx==0:
                 latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
-            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
             tf.add_to_collection('KEY_NODES', latent_manipulator)
             tf.add_to_collection('KEY_NODES', encoded_latents)
             tf.add_to_collection('KEY_NODES', encoded_images)
@@ -160,12 +161,13 @@ def main():
 
                 with tf.name_scope('y_domain_loss'):
                     if base_option['progan']:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=None)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=base_option['resolution'], structure=None)
                     else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=None)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=base_option['resolution'], structure=None)
 
-                    fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+                    fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)
                     real_image = tf.identity(images, name='y_real')
+                    tf.add_to_collection('IMAGE_GENERATED', fake_image)
 
                     fake_image_critic_out = image_critic.get_output_for(fake_image, None)
                     real_image_critic_out = image_critic.get_output_for(real_image, None)
@@ -247,6 +249,7 @@ def main():
         _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=base_option['image_output'], family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=base_option['image_output'], family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        generated_image_summary = tf.summary.image('generated', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=base_option['image_output'], family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
@@ -270,27 +273,28 @@ def main():
     encoder_lr = base_option['encoder_learning_rate']
     generator_lr = base_option['generator_learning_rate']
     for iter in tqdm(range(base_option['num_iter'])):
-        train_imbatch = sess.run(get_images)
-        _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+        train_imbatch = sess.run(get_train_image)
+        val_imbatch = sess.run(get_val_image)
+        _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
         for _ in range(base_option['critic_iter']):
-            _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+            _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
 
-        _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
         for _ in range(base_option['critic_iter']):
-            _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+            _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
 
-        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
         train_summary_writer.add_summary(train_scalar_summary, iter)
-        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: val_labelbatch})
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
         val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%base_option['save_iter']==0:
-            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
+            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
-            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch})
             val_summary_writer.add_summary(val_image_summary, iter)
             if iter==0:
-                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch})
                 val_summary_writer.add_summary(val_original_image_summary, iter)
 
             save_pkl((encoder, generator, latent_critic, image_critic), base_option['result_dir']+'/model/model.pkl')

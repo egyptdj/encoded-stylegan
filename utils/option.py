@@ -7,6 +7,7 @@ def parse():
     parser = argparse.ArgumentParser(description='- Encoded StyleGAN -')
     parser.add_argument('-nE', '--exp_name', type=str, default='exp', help='experiment name')
     parser.add_argument('-g', '--num_gpus', type=int, default=1, help='number of gpus to use')
+    parser.add_argument('-r', '--resolution', type=int, default=128, help='resolution')
     parser.add_argument('-b', '--minibatch_size', type=int, default=2, help='number of data to place in a minibatch')
     parser.add_argument('-lE', '--encoder_learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
     parser.add_argument('-lG', '--generator_learning_rate', type=float, default=1e-3, help='learning rate of the encoder training')
