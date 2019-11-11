@@ -328,7 +328,8 @@ def main():
                 val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
                 val_summary_writer.add_summary(val_original_image_summary, iter)
 
-            save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
+            # save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
+            save_pkl(encoder, generator), args.result_dir+'/model/model.pkl')
 
 
 
