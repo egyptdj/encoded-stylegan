@@ -15,7 +15,7 @@ def parse():
     parser.add_argument('-sV', '--vgg_shape', type=int, default=224, help='vgg input reshape size')
     parser.add_argument('-lV', '--vgg_lambda', type=float, default=1.0, help='vgg perceptual coefficient')
     parser.add_argument('-l2', '--l2_lambda', type=float, default=1.0, help='l2 coefficient')
-    parser.add_argument('-l2', '--l1_lambda', type=float, default=1.0, help='l1 coefficient')
+    parser.add_argument('-l1', '--l1_lambda', type=float, default=1.0, help='l1 coefficient')
     parser.add_argument('--lpips_lambda', type=float, default=0.0, help='lpips coefficient')
     parser.add_argument('--mssim_lambda', type=float, default=0.0, help='mssim coefficient')
     parser.add_argument('--logcosh_lambda', type=float, default=0.0, help='logcosh coefficient')
