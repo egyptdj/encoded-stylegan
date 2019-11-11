@@ -33,7 +33,7 @@ def main():
 
     def resize(height=base_option['resolution'], width=base_option['resolution']):
         def transformation_func(x):
-            return tf.image.resize_with_crop_or_pad(x['image'], height, width)
+            return tf.image.resize_with_crop_or_pad(tf.image.resize(x['image'], [157,128]), height, width)
         return transformation_func
 
     dataset_builder = tfds.builder("celeb_a")
