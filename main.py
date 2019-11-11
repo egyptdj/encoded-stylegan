@@ -66,9 +66,9 @@ def main():
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimizers'):
         encoder_optimizer = tflib.Optimizer(name='encoder_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        z_critic_optimizer = tflib.Optimizer(name='z_critic_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        y_critic_optimizer = tflib.Optimizer(name='y_critic_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        # generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        # z_critic_optimizer = tflib.Optimizer(name='z_critic_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        # y_critic_optimizer = tflib.Optimizer(name='y_critic_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
 
     # CONSTRUCT MODELS
     for gpu_idx in gpus:
@@ -154,89 +154,90 @@ def main():
                         regression_loss += args.logcosh_lambda*logcosh_loss
 
 
-                with tf.name_scope('z_domain_loss'):
-                    latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                    fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
-                    real_latent = tf.identity(encoded_latents, name='z_real')
-
-                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
-                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
-
-                    with tf.name_scope("fake_loss"):
-                        fake_latent_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_latent_critic_out, \
-                            weights=1.0, scope='fake_latent_loss')
-
-                    with tf.name_scope("real_loss"):
-                        real_latent_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=real_latent_critic_out, \
-                            weights=1.0, scope='real_latent_critic_loss')
-
-                        fake_latent_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_latent_critic_out, \
-                            weights=1.0, scope='fake_latent_critic_loss')
-
-                        # WASSERSTEIN GAN - GRADIENT PENALTY
-                        with tf.name_scope('gradient_penalty'):
-                            epsilon = tf.random.uniform([], name='epsilon')
-                            gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='gradient_latent')
-                            critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
-                            gradients = tf.gradients(critic_gradient_out, gradient_latent, name='gradients')
-                            gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
-                            gradient_penalty = tf.square(gradients_norm -1)
-
-                    z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + gradient_penalty
-                    z_critic_fake_loss = -fake_latent_loss
-
-                with tf.name_scope('y_domain_loss'):
-                    if args.progan:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=None)
-                    else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=None)
-
-                    fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
-                    real_image = tf.identity(images, name='y_real')
-
-                    fake_image_critic_out = image_critic.get_output_for(fake_image, None)
-                    real_image_critic_out = image_critic.get_output_for(real_image, None)
-                    with tf.name_scope("fake_loss"):
-                        fake_image_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_image_critic_out, \
-                            weights=1.0, scope='fake_image_loss')
-
-                    with tf.name_scope("real_loss"):
-                        real_image_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=real_image_critic_out, \
-                            weights=1.0, scope='real_image_critic_loss')
-
-                        fake_image_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_image_critic_out, \
-                            weights=1.0, scope='fake_image_critic_loss')
-
-                        # WASSERSTEIN GAN - GRADIENT PENALTY
-                        with tf.name_scope('gradient_penalty'):
-                            epsilon = tf.random.uniform([], name='epsilon')
-                            gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='gradient_image')
-                            critic_gradient_out = image_critic.get_output_for(gradient_image, None)
-                            gradients = tf.gradients(critic_gradient_out, gradient_image, name='gradients')
-                            gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
-                            gradient_penalty = tf.square(gradients_norm -1)
-
-                    y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + gradient_penalty
-                    y_critic_fake_loss = -fake_image_loss
+                # with tf.name_scope('z_domain_loss'):
+                #     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
+                #     fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
+                #     real_latent = tf.identity(encoded_latents, name='z_real')
+                #
+                #     fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
+                #     real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
+                #
+                #     with tf.name_scope("fake_loss"):
+                #         fake_latent_loss = tf.losses.compute_weighted_loss(\
+                #             losses=fake_latent_critic_out, \
+                #             weights=1.0, scope='fake_latent_loss')
+                #
+                #     with tf.name_scope("real_loss"):
+                #         real_latent_critic_loss = tf.losses.compute_weighted_loss(\
+                #             losses=real_latent_critic_out, \
+                #             weights=1.0, scope='real_latent_critic_loss')
+                #
+                #         fake_latent_critic_loss = tf.losses.compute_weighted_loss(\
+                #             losses=fake_latent_critic_out, \
+                #             weights=1.0, scope='fake_latent_critic_loss')
+                #
+                #         # WASSERSTEIN GAN - GRADIENT PENALTY
+                #         with tf.name_scope('gradient_penalty'):
+                #             epsilon = tf.random.uniform([], name='epsilon')
+                #             gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='gradient_latent')
+                #             critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
+                #             gradients = tf.gradients(critic_gradient_out, gradient_latent, name='gradients')
+                #             gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
+                #             gradient_penalty = tf.square(gradients_norm -1)
+                #
+                #     z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + gradient_penalty
+                #     z_critic_fake_loss = -fake_latent_loss
+                #
+                # with tf.name_scope('y_domain_loss'):
+                #     if args.progan:
+                #         image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=None)
+                #     else:
+                #         image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=None)
+                #
+                #     fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+                #     real_image = tf.identity(images, name='y_real')
+                #
+                #     fake_image_critic_out = image_critic.get_output_for(fake_image, None)
+                #     real_image_critic_out = image_critic.get_output_for(real_image, None)
+                #     with tf.name_scope("fake_loss"):
+                #         fake_image_loss = tf.losses.compute_weighted_loss(\
+                #             losses=fake_image_critic_out, \
+                #             weights=1.0, scope='fake_image_loss')
+                #
+                #     with tf.name_scope("real_loss"):
+                #         real_image_critic_loss = tf.losses.compute_weighted_loss(\
+                #             losses=real_image_critic_out, \
+                #             weights=1.0, scope='real_image_critic_loss')
+                #
+                #         fake_image_critic_loss = tf.losses.compute_weighted_loss(\
+                #             losses=fake_image_critic_out, \
+                #             weights=1.0, scope='fake_image_critic_loss')
+                #
+                #         # WASSERSTEIN GAN - GRADIENT PENALTY
+                #         with tf.name_scope('gradient_penalty'):
+                #             epsilon = tf.random.uniform([], name='epsilon')
+                #             gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='gradient_image')
+                #             critic_gradient_out = image_critic.get_output_for(gradient_image, None)
+                #             gradients = tf.gradients(critic_gradient_out, gradient_image, name='gradients')
+                #             gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
+                #             gradient_penalty = tf.square(gradients_norm -1)
+                #
+                #     y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + gradient_penalty
+                #     y_critic_fake_loss = -fake_image_loss
 
                 with tf.name_scope('final_losses'):
-                    encoder_loss = regression_loss + z_critic_fake_loss
-                    generator_loss = regression_loss + y_critic_fake_loss
-                    z_critic_loss = tf.identity(z_critic_real_loss)
-                    y_critic_loss = tf.identity(y_critic_real_loss)
-                    tf.add_to_collection("LOSS_REGRESSION", regression_loss)
-                    tf.add_to_collection("LOSS_ENCODER", encoder_loss)
-                    tf.add_to_collection("LOSS_GENERATOR", generator_loss)
-                    tf.add_to_collection("LOSS_Z_CRITIC_REAL", z_critic_real_loss)
-                    tf.add_to_collection("LOSS_Y_CRITIC_REAL", y_critic_real_loss)
-                    tf.add_to_collection("LOSS_Z_CRITIC_FAKE", z_critic_fake_loss)
-                    tf.add_to_collection("LOSS_Y_CRITIC_FAKE", y_critic_fake_loss)
+                    # encoder_loss = regression_loss + z_critic_fake_loss
+                    # generator_loss = regression_loss + y_critic_fake_loss
+                    # z_critic_loss = tf.identity(z_critic_real_loss)
+                    # y_critic_loss = tf.identity(y_critic_real_loss)
+                    # tf.add_to_collection("LOSS_REGRESSION", regression_loss)
+                    # tf.add_to_collection("LOSS_ENCODER", encoder_loss)
+                    # tf.add_to_collection("LOSS_GENERATOR", generator_loss)
+                    # tf.add_to_collection("LOSS_Z_CRITIC_REAL", z_critic_real_loss)
+                    # tf.add_to_collection("LOSS_Y_CRITIC_REAL", y_critic_real_loss)
+                    # tf.add_to_collection("LOSS_Z_CRITIC_FAKE", z_critic_fake_loss)
+                    # tf.add_to_collection("LOSS_Y_CRITIC_FAKE", y_critic_fake_loss)
+                    encoder_loss = regression_loss
 
                 with tf.name_scope('metrics'):
                     psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
@@ -249,17 +250,17 @@ def main():
                     print("\n".join([v.name for v in [*encoder.trainables.values()]]))
                     encoder_optimizer.register_gradients(encoder_loss, encoder.trainables)
 
-                    print("================== GENERATOR VARS ==================")
-                    print("\n".join([v.name for v in [*generator.trainables.values()]]))
-                    generator_optimizer.register_gradients(generator_loss, generator.trainables)
-
-                    print("================== Z_CRITIC VARS ==================")
-                    print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
-                    z_critic_optimizer.register_gradients(z_critic_loss, latent_critic.trainables)
-
-                    print("================== Y_CRITIC VARS ==================")
-                    print("\n".join([v.name for v in [*image_critic.trainables.values()]]))
-                    y_critic_optimizer.register_gradients(y_critic_loss, image_critic.trainables)
+                    # print("================== GENERATOR VARS ==================")
+                    # print("\n".join([v.name for v in [*generator.trainables.values()]]))
+                    # generator_optimizer.register_gradients(generator_loss, generator.trainables)
+                    #
+                    # print("================== Z_CRITIC VARS ==================")
+                    # print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
+                    # z_critic_optimizer.register_gradients(z_critic_loss, latent_critic.trainables)
+                    #
+                    # print("================== Y_CRITIC VARS ==================")
+                    # print("\n".join([v.name for v in [*image_critic.trainables.values()]]))
+                    # y_critic_optimizer.register_gradients(y_critic_loss, image_critic.trainables)
 
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('regression', tf.reduce_mean(tf.get_collection('LOSS_REGRESSION')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -269,16 +270,16 @@ def main():
         if args.lpips_lambda > 0.0: _ = tf.summary.scalar('lpips', tf.reduce_mean(tf.get_collection('LOSS_LPIPS')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.mssim_lambda > 0.0: _ = tf.summary.scalar('mssim', tf.reduce_mean(tf.get_collection('LOSS_MSSIM')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.logcosh_lambda > 0.0: _ = tf.summary.scalar('logcosh', tf.reduce_mean(tf.get_collection('LOSS_LOGCOSH')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('image_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('image_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('psnr', tf.reduce_mean(tf.get_collection('METRIC_PSNR')), family='metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('encoder', encoder_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
@@ -289,11 +290,11 @@ def main():
     # DEFINE OPTIMIZE OPS
     with tf.name_scope('optimize'):
         encoder_optimize = encoder_optimizer.apply_updates()
-        generator_optimize = generator_optimizer.apply_updates()
-        # generator_optimize = avg_generator.setup_as_moving_average_of(generator, beta=Gs_beta)
-
-        z_critic_optimize = z_critic_optimizer.apply_updates()
-        y_critic_optimize = y_critic_optimizer.apply_updates()
+        # generator_optimize = generator_optimizer.apply_updates()
+        # # generator_optimize = avg_generator.setup_as_moving_average_of(generator, beta=Gs_beta)
+        #
+        # z_critic_optimize = z_critic_optimizer.apply_updates()
+        # y_critic_optimize = y_critic_optimizer.apply_updates()
 
     os.makedirs(args.result_dir+'/model', exist_ok=True)
     os.makedirs(args.result_dir+'/summary', exist_ok=True)
@@ -306,12 +307,12 @@ def main():
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_images)
         _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
-        for _ in range(args.critic_iter):
-            _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
-
-        _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
-        for _ in range(args.critic_iter):
-            _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        # for _ in range(args.critic_iter):
+        #     _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+        #
+        # _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        # for _ in range(args.critic_iter):
+        #     _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
 
         train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_scalar_summary, iter)
