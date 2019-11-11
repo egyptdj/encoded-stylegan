@@ -43,6 +43,6 @@ def parse():
     os.makedirs(args.result_dir, exist_ok=True)
     with open(os.path.join(args.result_dir,"argv.csv"), 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(opt_dict.items())
+        writer.writerows(var(args).items())
 
     return opt_dict
