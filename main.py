@@ -20,7 +20,7 @@ from stylegan.training.misc import save_pkl
 from stylegan.training.networks_stylegan import *
 
 def main():
-    base_option = utils.option.parse()
+    args = utils.option.parse()
     tf.random.set_random_seed(args.seed)
     tf.config.set_soft_device_placement(True)
 
