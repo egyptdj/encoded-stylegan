@@ -45,4 +45,4 @@ def parse():
         writer = csv.writer(f)
         writer.writerows(vars(args).items())
 
-    return opt_dict
+    return args
