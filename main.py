@@ -104,7 +104,6 @@ def main():
             with tf.name_scope('loss'):
                 MSE = tf.keras.losses.MeanSquaredError()
                 MAE = tf.keras.losses.MeanAbsoluteError()
-                LogCosh = tf.keras.losses.logcosh()
 
                 with tf.name_scope('regression_loss'):
                     regression_loss = 0.0
@@ -150,7 +149,7 @@ def main():
 
                     # LOGCOSH loss
                     if args.logcosh_lambda > 0.0:
-                        logcosh_loss = LogCosh(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]))
+                        logcosh_loss = tf.keras.losses.logcosh(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]))
                         tf.add_to_collection('LOSS_LOGCOSH', logcosh_loss)
                         regression_loss += args.logcosh_lambda*logcosh_loss
 
