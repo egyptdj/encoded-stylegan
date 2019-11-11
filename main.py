@@ -135,7 +135,7 @@ def main():
                     # LPIPS loss
                     if args.lpips_lambda > 0.0:
                         lpips_url = 'https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2'
-                        with dnnlib.util.open_url(lpips_url, cache_dir=config.cache_dir) as lpips:
+                        with dnnlib.util.open_url(lpips_url, cache_dir=args.cache_dir) as lpips:
                             lpips_network =  pickle.load(lpips)
                         lpips_loss = lpips_network.get_output_for(images, encoded_images)
                         tf.add_to_collection('LOSS_LPIPS', lpips_loss)
