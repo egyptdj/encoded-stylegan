@@ -121,7 +121,7 @@ def main():
                         regression_loss += args.l1_lambda*l1_loss
 
                     # VGG loss
-                    if args.vgg_labmda > 0.0:
+                    if args.vgg_lambda > 0.0:
                         image_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
                         image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
                         image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
