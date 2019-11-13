@@ -16,6 +16,10 @@ def parse():
     parser.add_argument('-sV', '--vgg_shape', type=int, default=224, help='vgg input reshape size')
     parser.add_argument('-lV', '--vgg_lambda', type=float, default=1.0, help='vgg perceptual coefficient')
     parser.add_argument('-l2', '--l2_lambda', type=float, default=1.0, help='l2 coefficient')
+    parser.add_argument('-l1', '--l1_lambda', type=float, default=1.0, help='l1 coefficient')
+    parser.add_argument('--lpips_lambda', type=float, default=0.0, help='lpips coefficient')
+    parser.add_argument('--mssim_lambda', type=float, default=0.0, help='mssim coefficient')
+    parser.add_argument('--logcosh_lambda', type=float, default=0.0, help='logcosh coefficient')
     parser.add_argument('-nlin', '--nonlinearity', type=str, default='lrelu', help='nonlinearity [lrelu/relu]')
     parser.add_argument('-wsc', '--use_wscale', type=bool, default=True, help='use wscale')
     parser.add_argument('-mbstd', '--mbstd_group_size', type=int, default=4, help='mbstd group size')
@@ -30,16 +34,17 @@ def parse():
     parser.add_argument('-iC', '--critic_iter', type=int, default=5, help='total number of iterations to train')
     parser.add_argument('-iS', '--save_iter', type=int, default=1000, help='save model at every specified iterations')
     parser.add_argument('-iO', '--image_output', type=int, default=1, help='number of image summary output')
+    parser.add_argument('--latent_critic_layers', type=int, default=8, help='number of z_critic layers')
     parser.add_argument('--progan', action='store_true', help='use progan model')
     parser.add_argument('--seed', type=int, default=0, help='random state seed')
     parser.add_argument('--dataset_generated', action='store_true', help='generated dataset or FFHQ')
-    opt_dict = vars(parser.parse_args())
+    args = parser.parse_args()
 
-    opt_dict['result_dir'] = os.path.join(opt_dict['result_dir'], opt_dict['exp_name'])
+    args.result_dir = os.path.join(args.result_dir, args.exp_name)
 
-    os.makedirs(opt_dict['result_dir'], exist_ok=True)
-    with open(os.path.join(opt_dict['result_dir'],"argv.csv"), 'w', newline='') as f:
+    os.makedirs(args.result_dir, exist_ok=True)
+    with open(os.path.join(args.result_dir,"argv.csv"), 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerows(opt_dict.items())
+        writer.writerows(vars(args).items())
 
-    return opt_dict
+    return args
