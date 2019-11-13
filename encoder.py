@@ -301,6 +301,7 @@ def minibatch_stddev_layer(x, group_size=4, num_new_features=1):
 def E_basic(
     input,                              # First input: Images [minibatch, channel, height, width].
     out_shape           = [18, 512],
+    feature_collection  = None,
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 128,         # Input resolution. Overridden based on dataset.
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
@@ -357,8 +358,10 @@ def E_basic(
             return x
 
     x = fromrgb(input, resolution_log2)
+    if feature_collection: tf.add_to_collection(feature_collection, x)
     for res in range(resolution_log2, 2, -1):
         x = block(x, res)
+        if feature_collection: tf.add_to_collection(feature_collection, x)
     output = block(x, 2)
 
     assert output.dtype == tf.as_dtype(dtype)

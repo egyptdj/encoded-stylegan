@@ -33,7 +33,7 @@ def main():
 
     def resize(height=args.resolution, width=args.resolution):
         def transformation_func(x):
-            return tf.image.resize_with_crop_or_pad(tf.image.resize(x['image, [157,128]), height, width)
+            return tf.image.resize_with_crop_or_pad(tf.image.resize(x['image'], [157,128]), height, width)
         return transformation_func
 
     dataset_builder = tfds.builder("celeb_a")
@@ -63,8 +63,9 @@ def main():
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimizers'):
-        encoder_optimizer = tflib.Optimizer(name='encoder_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        # encoder_optimizer = tflib.Optimizer(name='encoder_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        # generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        autoencoder_optimizer = tflib.Optimizer(name='autoencoder_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
         z_critic_optimizer = tflib.Optimizer(name='z_critic_optimizer', learning_rate=encoder_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
         y_critic_optimizer = tflib.Optimizer(name='y_critic_optimizer', learning_rate=generator_learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
 
@@ -77,12 +78,8 @@ def main():
             if bool(args.blur_filter): blur = [1,2,1]
             else: blur=None
 
-            if args.progan:
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=args.resolution, structure=None)
-                encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur)
-            else:
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylogan.G_style', num_channels=3, resolution=args.resolution, structure=None)
-                encoder = tflib.Network("encoder", out_shape=[18, 512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur)
+            encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur, feature_collection='FEATURES')
+            generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=args.resolution, structure='linear', feature_collection='FEATURES')
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -226,13 +223,15 @@ def main():
                     y_critic_fake_loss = -fake_image_loss
 
                 with tf.name_scope('final_losses'):
-                    encoder_loss = regression_loss + z_critic_fake_loss
-                    generator_loss = regression_loss + y_critic_fake_loss
+                    # encoder_loss = regression_loss + z_critic_fake_loss
+                    # generator_loss = regression_loss + y_critic_fake_loss
+                    autoencoder_loss = regression_loss + z_critic_fake_loss + y_critic_fake_loss
                     z_critic_loss = tf.identity(z_critic_real_loss)
                     y_critic_loss = tf.identity(y_critic_real_loss)
                     tf.add_to_collection("LOSS_REGRESSION", regression_loss)
-                    tf.add_to_collection("LOSS_ENCODER", encoder_loss)
-                    tf.add_to_collection("LOSS_GENERATOR", generator_loss)
+                    # tf.add_to_collection("LOSS_ENCODER", encoder_loss)
+                    # tf.add_to_collection("LOSS_GENERATOR", generator_loss)
+                    tf.add_to_collection("LOSS_AUTOENCODER", autoencoder_loss)
                     tf.add_to_collection("LOSS_Z_CRITIC_REAL", z_critic_real_loss)
                     tf.add_to_collection("LOSS_Y_CRITIC_REAL", y_critic_real_loss)
                     tf.add_to_collection("LOSS_Z_CRITIC_FAKE", z_critic_fake_loss)
@@ -245,13 +244,19 @@ def main():
                     tf.add_to_collection('METRIC_SSIM', ssim)
 
                 with tf.name_scope('backprop'):
+                    # print("================== ENCODER VARS ==================")
+                    # print("\n".join([v.name for v in [*encoder.trainables.values()]]))
+                    # encoder_optimizer.register_gradients(encoder_loss, encoder.trainables)
+                    #
+                    # print("================== GENERATOR VARS ==================")
+                    # print("\n".join([v.name for v in [*generator.trainables.values()]]))
+                    # generator_optimizer.register_gradients(generator_loss, generator.trainables)
+
+                    autoencoder_trainables = encoder.trainables.copy()
+                    autoencoder_trainables.update(generator.trainables)
                     print("================== ENCODER VARS ==================")
                     print("\n".join([v.name for v in [*encoder.trainables.values()]]))
-                    encoder_optimizer.register_gradients(encoder_loss, encoder.trainables)
-
-                    print("================== GENERATOR VARS ==================")
-                    print("\n".join([v.name for v in [*generator.trainables.values()]]))
-                    generator_optimizer.register_gradients(generator_loss, generator.trainables)
+                    autoencoder_optimizer.register_gradients(autoencoder_loss, autoencoder_trainables)
 
                     print("================== Z_CRITIC VARS ==================")
                     print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
@@ -269,8 +274,9 @@ def main():
         if args.lpips_lambda > 0.0: _ = tf.summary.scalar('lpips', tf.reduce_mean(tf.get_collection('LOSS_LPIPS')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.mssim_lambda > 0.0: _ = tf.summary.scalar('mssim', tf.reduce_mean(tf.get_collection('LOSS_MSSIM')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.logcosh_lambda > 0.0: _ = tf.summary.scalar('logcosh', tf.reduce_mean(tf.get_collection('LOSS_LOGCOSH')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('encoder', tf.reduce_mean(tf.get_collection('LOSS_ENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # _ = tf.summary.scalar('generator', tf.reduce_mean(tf.get_collection('LOSS_GENERATOR')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('autoencoder', tf.reduce_mean(tf.get_collection('LOSS_AUTOENCODER')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -281,7 +287,7 @@ def main():
         _ = tf.summary.scalar('generator', generator_learning_rate, family='lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         recovered_image_summary = tf.summary.image('recovered', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        generated_image_summary = tf.summary.image('generated', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        # generated_image_summary = tf.summary.image('generated', tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), max_outputs=args.image_output, family='images', collections=[tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
@@ -289,8 +295,9 @@ def main():
 
     # DEFINE OPTIMIZE OPS
     with tf.name_scope('optimize'):
-        encoder_optimize = encoder_optimizer.apply_updates()
-        generator_optimize = generator_optimizer.apply_updates()
+        # encoder_optimize = encoder_optimizer.apply_updates()
+        # generator_optimize = generator_optimizer.apply_updates()
+        autoencoder_optimize = autoencoder_optimizer.apply_updates()
         # generator_optimize = avg_generator.setup_as_moving_average_of(generator, beta=Gs_beta)
 
         z_critic_optimize = z_critic_optimizer.apply_updates()
@@ -307,12 +314,9 @@ def main():
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_train_image)
         val_imbatch = sess.run(get_val_image)
-        _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
+        _ = sess.run(autoencoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
         for _ in range(args.critic_iter):
             _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
-
-        _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
-        for _ in range(args.critic_iter):
             _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
 
         train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
@@ -323,11 +327,10 @@ def main():
         if iter%args.save_iter==0:
             train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
-            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch})
+            val_image_summary = sess.run(image_summary, feed_dict={image_input: val_imbatch})
             val_summary_writer.add_summary(val_image_summary, iter)
-            if iter==0:
-                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch})
-                val_summary_writer.add_summary(val_original_image_summary, iter)
+            # gen_summary = sess.run(generated_image_summary)
+            # train_summary_writer.add_summary(gen_summary, iter)
 
             save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
 
