@@ -209,20 +209,20 @@ def G_paper(
         lod = resolution_log2 - res
         with tf.variable_scope('ToRGB_lod%d' % lod):
             return apply_bias(conv2d(x, fmaps=num_channels, kernel=1, gain=1, use_wscale=use_wscale))
-    
+
     # Linear structure: simple but inefficient.
     if structure == 'linear':
         x = block(combo_in, 2)
+        if feature_collection: x = tf.concat([x, encoder_features[-1]], axis=1)
         images_out = torgb(x, 2)
-        if feature_collection: tf.concat([images_out, encoder_features[-1]], axis=1)
         for res in range(3, resolution_log2 + 1):
             lod = resolution_log2 - res
             x = block(x, res)
+            if feature_collection: x = tf.concat([x, encoder_features[-1*res+1]], axis=1)
             img = torgb(x, res)
             images_out = upscale2d(images_out)
             with tf.variable_scope('Grow_lod%d' % lod):
                 images_out = lerp_clip(img, images_out, lod_in - lod)
-                if feature_collection: tf.concat([images_out, encoder_features[-1*res+1]], axis=1)
 
     # Recursive structure: complex but efficient.
     if structure == 'recursive':
