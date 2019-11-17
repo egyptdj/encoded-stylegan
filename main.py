@@ -185,7 +185,7 @@ def main():
                             gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                             gradient_penalty = tf.square(gradients_norm -1)
 
-                    z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + gradient_penalty
+                    z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + args.gp_lambda*gradient_penalty
                     z_critic_fake_loss = -fake_latent_loss
 
                 with tf.name_scope('y_domain_loss'):
@@ -222,7 +222,7 @@ def main():
                             gradients_norm = tf.norm(gradients[0], ord=2, name='gradient_norm')
                             gradient_penalty = tf.square(gradients_norm -1)
 
-                    y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + gradient_penalty
+                    y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + args.gp_lambda*gradient_penalty
                     y_critic_fake_loss = -fake_image_loss
 
                 with tf.name_scope('final_losses'):
@@ -305,13 +305,15 @@ def main():
     generator_lr = args.generator_learning_rate
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_images)
-        _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
-        for _ in range(args.critic_iter):
-            _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+        for _ in range(args.encoder_iter):
+            _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+            for _ in range(args.critic_iter):
+                _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
 
-        _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
-        for _ in range(args.critic_iter):
-            _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        for _ in range(args.generator_iter):
+            _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+            for _ in range(args.critic_iter):
+                _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
 
         train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_scalar_summary, iter)
