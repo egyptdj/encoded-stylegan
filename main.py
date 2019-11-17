@@ -78,17 +78,19 @@ def main():
             if bool(args.blur_filter): blur = [1,2,1]
             else: blur=None
 
-            encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur, feature_collection='FEATURES')
-            generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=args.resolution, structure='linear', feature_collection='FEATURES')
+            autoencoder = tflib.Network("autoencoder", out_shape=[512], func_name='autoencoder.AE_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur, feature_collection='FEATURES')
+            # encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur, feature_collection='FEATURES')
+            # generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=args.resolution, structure='linear', feature_collection='FEATURES')
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
-            encoded_latents = encoder.get_output_for(images)
-            if gpu_idx==0:
-                latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
-            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
-            tf.add_to_collection('KEY_NODES', latent_manipulator)
-            tf.add_to_collection('KEY_NODES', encoded_latents)
+            # encoded_latents = encoder.get_output_for(images)
+            # if gpu_idx==0:
+            #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
+            # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
+            encoded_images = autoencoder.get_output_for(images, None, is_validation=True, use_noise=False, randomize_noise=False)
+            # tf.add_to_collection('KEY_NODES', latent_manipulator)
+            # tf.add_to_collection('KEY_NODES', encoded_latents)
             tf.add_to_collection('KEY_NODES', encoded_images)
             tf.add_to_collection('IMAGE_ENCODED', encoded_images)
             """ images is the X and Y domain,
@@ -252,11 +254,11 @@ def main():
                     # print("\n".join([v.name for v in [*generator.trainables.values()]]))
                     # generator_optimizer.register_gradients(generator_loss, generator.trainables)
 
-                    autoencoder_trainables = encoder.trainables.copy()
-                    autoencoder_trainables.update(generator.trainables)
                     print("================== AUTOENCODER VARS ==================")
-                    print("\n".join([v.name for v in [*autoencoder_trainables.values()]]))
-                    autoencoder_optimizer.register_gradients(regression_loss, autoencoder_trainables)
+                    print("\n".join([v.name for v in [*autoencoder.trainables.values()]]))
+                    print("================== AUTOENCODER LAYERSS ==================")
+                    print(autoencoder.print_layers())
+                    autoencoder_optimizer.register_gradients(regression_loss, autoencoder.trainables)
 
                     # print("================== Z_CRITIC VARS ==================")
                     # print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
@@ -333,7 +335,7 @@ def main():
             # train_summary_writer.add_summary(gen_summary, iter)
 
             # save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
-            save_pkl((encoder, generator), args.result_dir+'/model/model.pkl')
+            save_pkl(autoencoder, args.result_dir+'/model/model.pkl')
 
 
 
