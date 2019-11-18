@@ -155,12 +155,19 @@ def main():
 
 
                 with tf.name_scope('z_domain_loss'):
-                    latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
+                    if args.progan:
+                        latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=1, resolution=512, structure=None)
+                    else:
+                        latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=1, resolution=512, structure=None)
+
                     fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
-                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
-                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
+                    fake_latent = tf.tile(tf.expand_dims(tf.expand_dims(fake_latent, 1),1), [1,1,512,1])
+                    real_latent = tf.tile(tf.expand_dims(tf.expand_dims(real_latent, 1),1), [1,1,512,1])
+
+                    fake_latent_critic_out = latent_critic.get_output_for(fake_latent, None)
+                    real_latent_critic_out = latent_critic.get_output_for(real_latent, None)
 
                     with tf.name_scope("fake_loss"):
                         fake_latent_loss = tf.losses.compute_weighted_loss(\
