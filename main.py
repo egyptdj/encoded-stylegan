@@ -187,7 +187,7 @@ def main():
                         with tf.name_scope('latent_gradient_penalty'):
                             epsilon = tf.random.uniform([], name='epsilon')
                             gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='latent_gradient')
-                            latent_critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
+                            latent_critic_gradient_out = latent_critic.get_output_for(gradient_latent, None)
                             latent_gradients = tf.gradients(latent_critic_gradient_out, gradient_latent, name='latent_gradients')
                             latent_gradients_norm = tf.norm(latent_gradients[0], ord=2, name='latent_gradient_norm')
                             latent_gradient_penalty = tf.square(latent_gradients_norm -1)
