@@ -300,7 +300,7 @@ def minibatch_stddev_layer(x, group_size=4, num_new_features=1):
 
 def E_basic(
     input,                              # First input: Images [minibatch, channel, height, width].
-    out_shape           = [18, 512],
+    out_shape           = [512],
     num_channels        = 3,            # Number of input color channels. Overridden based on dataset.
     resolution          = 1024,         # Input resolution. Overridden based on dataset.
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
