@@ -31,7 +31,7 @@ def parse():
     parser.add_argument('-iE', '--encoder_iter', type=int, default=1, help='number of encoder iterations')
     parser.add_argument('-iG', '--generator_iter', type=int, default=1, help='number of generator iterations')
     parser.add_argument('-iS', '--save_iter', type=int, default=1000, help='save model at every specified iterations')
-    parser.add_argument('-iO', '--image_output', type=int, default=1, help='number of image summary output')
+    parser.add_argument('-iO', '--image_output', type=int, default=4, help='number of image summary output')
     parser.add_argument('--latent_critic_layers', type=int, default=8, help='number of z_critic layers')
     parser.add_argument('--progan', action='store_true', help='use progan model')
     parser.add_argument('--seed', type=int, default=0, help='random state seed')
