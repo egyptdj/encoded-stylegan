@@ -76,14 +76,12 @@ def main():
             print("CONSTRUCTING MODEL WITH GPU: {}".format(gpu_idx))
 
             # DEFINE ENCODER AND GENERATOR
-            if bool(args.blur_filter): blur = [1,2,1]
-            else: blur=None
             generator = Gs.clone(name='generator')
-            avg_generator = Gs.clone(name='avg_generator')
+            # avg_generator = Gs.clone(name='avg_generator')
             if args.progan:
-                encoder = tflib.Network("encoder", out_shape=[512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur)
+                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure)
             else:
-                encoder = tflib.Network("encoder", out_shape=[18, 512], func_name='encoder.E_basic', nonlinearity=args.nonlinearity, use_wscale=args.use_wscale, mbstd_group_size=args.mbstd_group_size, mbstd_num_features=args.mbstd_num_features, fused_scale=args.fused_scale, blur_filter=blur)
+                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure=args.structure)
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -190,9 +188,9 @@ def main():
 
                 with tf.name_scope('y_domain_loss'):
                     if args.progan:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=None)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=args.structure)
                     else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=None)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
                     fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
                     real_image = tf.identity(images, name='y_real')
