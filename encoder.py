@@ -344,7 +344,7 @@ def E_basic(
                 with tf.variable_scope('GlobalAvgPool'):
                     feat = tf.reduce_mean(x, axis=[2,3])
                 with tf.variable_scope('DenseFeat'):
-                    feat = apply_bias(dense(feat, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
+                    feat = dense(feat, fmaps=out_fmap, gain=1, use_wscale=use_wscale)
                     feat = tf.reshape(feat, [-1]+out_shape)
                 return x, feat
             else: # 4x4
