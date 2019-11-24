@@ -301,6 +301,7 @@ def minibatch_stddev_layer(x, group_size=4, num_new_features=1):
 def E_basic(
     images_in,                          # First input: Images [minibatch, channel, height, width].
     out_shape        = [512],        # Output shape
+    out_type            = 'sum',         # Output type: 'sum' or 'cat'
     num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
     resolution          = 32,           # Input resolution. Overridden based on dataset.
     fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
@@ -398,7 +399,10 @@ def E_basic(
         feat = grow(2, resolution_log2 - 2)
         features_out.append(feat)
 
-    features_out = tf.add_n(features_out)
+    if out_type == 'sum':
+        features_out = tf.add_n(features_out)
+    elif out_type =='cat':
+        features_out = tf.concat(features_out, axis=-1)
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
     return features_out
