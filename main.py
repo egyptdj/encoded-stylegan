@@ -87,10 +87,11 @@ def main():
             else:
                 if args.progan:
                     encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure, out_type=args.latent_type)
-                    generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', latent_size=encoder.output_shape, num_channels=3, resolution=1024, structure=args.structure)
+                    generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', latent_size=encoder.output_shape[-1], num_channels=3, resolution=1024, structure=args.structure)
                 else:
                     encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure, out_type=args.latent_type)
-                    generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_style', latent_size=encoder.output_shape, num_channels=3, resolution=1024, structure=args.structure)
+                    generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_style', latent_size=encoder.output_shape[-1], num_channels=3, resolution=1024, structure=args.structure)
+                print (encoder.output_shape)
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -162,12 +163,12 @@ def main():
 
 
                 with tf.name_scope('z_domain_loss'):
-                    latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=encoder.output_shape, mapping_fmaps=encoder.output_shape, normalize_latents=False)
+                    latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=encoder.output_shape[-1], mapping_fmaps=encoder.output_shape[-1], normalize_latents=False)
                     fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
-                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,encoder.output_shape]), None)
-                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,encoder.output_shape]), None)
+                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,encoder.output_shape[-1]]), None)
+                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,encoder.output_shape[-1]]), None)
 
                     with tf.name_scope("fake_loss"):
                         fake_latent_loss = tf.losses.compute_weighted_loss(\
@@ -187,7 +188,7 @@ def main():
                         with tf.name_scope('latent_gradient_penalty'):
                             epsilon = tf.random.uniform([], name='epsilon')
                             gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='latent_gradient')
-                            latent_critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,encoder.output_shape]), None)
+                            latent_critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,encoder.output_shape[-1]]), None)
                             latent_gradients = tf.gradients(latent_critic_gradient_out, gradient_latent, name='latent_gradients')
                             latent_gradients_norm = tf.norm(latent_gradients[0], ord=2, name='latent_gradient_norm')
                             latent_gradient_penalty = tf.square(latent_gradients_norm -1)
