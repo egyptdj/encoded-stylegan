@@ -48,7 +48,6 @@ def main():
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
         image_input = tf.placeholder(tf.float32, [None,3,1024,1024], name='image_input')
-        image_input = image_input*2.0-1.0
         gpu_image_input = tf.split(image_input, args.num_gpus, axis=0)
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
@@ -199,8 +198,8 @@ def main():
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                    fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)
-                    real_image = tf.identity(images, name='y_real')
+                    fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
+                    real_image = tf.identity(images*2.0-1.0, name='y_real')
 
                     fake_image_critic_out = image_critic.get_output_for(fake_image, None)
                     real_image_critic_out = image_critic.get_output_for(real_image, None)
@@ -290,8 +289,8 @@ def main():
         _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='01_metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('encoder', encoder_learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('generator', generator_learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose((image_input+1.0)/2.0, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose((tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0)+1.0)/2.0, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
