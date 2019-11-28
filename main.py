@@ -187,8 +187,8 @@ def main():
                     fake_latent = generator.components.mapping.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0],tf.shape(encoded_latents)[2]]), None)
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
-                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,18,512]), None)
-                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,18,512]), None)
+                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,18*512]), None)
+                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,18*512]), None)
 
                     with tf.name_scope("fake_loss"):
                         fake_latent_loss = tf.losses.mean_squared_error(\
