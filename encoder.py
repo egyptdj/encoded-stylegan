@@ -305,7 +305,7 @@ def instance_aggregation(x, shape=512, epsilon=1e-8):
         x = tf.cast(x, tf.float32)
         x_mu = tf.reduce_mean(x, axis=[2,3])
         epsilon = tf.constant(epsilon, dtype=x.dtype, name='epsilon')
-        x_sigma = tf.rsqrt(tf.reduce_mean(tf.square(x-x_mu), axis=[2,3]) + epsilon)
+        x_sigma = tf.rsqrt(tf.reduce_mean(tf.square(x-tf.reduce_mean(x, axis=[2,3], keepdims=True)), axis=[2,3]) + epsilon)
         x = tf.concat([x_mu,x_sigma], axis=1)
         x = apply_bias(dense(x, fmaps=shape, gain=1))
         x = tf.cast(x, orig_dtype)
