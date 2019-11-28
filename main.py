@@ -19,6 +19,47 @@ from stylegan.training import dataset
 from stylegan.training.misc import save_pkl
 from stylegan.training.networks_stylegan import *
 
+
+def fp32(*values):
+    if len(values) == 1 and isinstance(values[0], tuple):
+        values = values[0]
+    values = tuple(tf.cast(v, tf.float32) for v in values)
+    return values if len(values) >= 2 else values[0]
+
+def G_wgan(G, D, opt, minibatch_size): # pylint: disable=unused-argument
+    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+    fake_images_out = G.get_output_for(latents, None, is_training=True)
+    fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
+    loss = -fake_scores_out
+    return loss
+
+def D_wgan_gp(G, D, opt, minibatch_size, reals, # pylint: disable=unused-argument
+    wgan_lambda     = 10.0,     # Weight for the gradient penalty term.
+    wgan_epsilon    = 0.001,    # Weight for the epsilon term, \epsilon_{drift}.
+    wgan_target     = 1.0):     # Target value for gradient magnitudes.
+
+    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+    fake_images_out = G.get_output_for(latents, None, is_training=True)
+    real_scores_out = fp32(D.get_output_for(reals*2.0-1.0, None, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
+    loss = fake_scores_out - real_scores_out
+
+    with tf.name_scope('GradientPenalty'):
+        mixing_factors = tf.random_uniform([minibatch_size, 1, 1, 1], 0.0, 1.0, dtype=fake_images_out.dtype)
+        mixed_images_out = tflib.lerp(tf.cast(reals, fake_images_out.dtype), fake_images_out, mixing_factors)
+        mixed_scores_out = fp32(D.get_output_for(mixed_images_out*2.0-1.0, None, is_training=True))
+        mixed_loss = opt.apply_loss_scaling(tf.reduce_sum(mixed_scores_out))
+        mixed_grads = opt.undo_loss_scaling(fp32(tf.gradients(mixed_loss, [mixed_images_out])[0]))
+        mixed_norms = tf.sqrt(tf.reduce_sum(tf.square(mixed_grads), axis=[1,2,3]))
+        gradient_penalty = tf.square(mixed_norms - wgan_target)
+    loss += gradient_penalty * (wgan_lambda / (wgan_target**2))
+
+    with tf.name_scope('EpsilonPenalty'):
+        epsilon_penalty = tf.square(real_scores_out)
+    loss += epsilon_penalty * wgan_epsilon
+    return loss
+
+
 def main():
     args = utils.option.parse()
     tf.random.set_random_seed(args.seed)
@@ -198,36 +239,37 @@ def main():
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                    fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
-                    real_image = tf.identity(images*2.0-1.0, name='y_real')
-
-                    fake_image_critic_out = image_critic.get_output_for(fake_image, None)
-                    real_image_critic_out = image_critic.get_output_for(real_image, None)
-                    with tf.name_scope("fake_loss"):
-                        fake_image_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_image_critic_out, \
-                            weights=1.0, scope='fake_image_loss')
-
-                    with tf.name_scope("real_loss"):
-                        real_image_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=real_image_critic_out, \
-                            weights=1.0, scope='real_image_critic_loss')
-
-                        fake_image_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_image_critic_out, \
-                            weights=1.0, scope='fake_image_critic_loss')
-
-                        # WASSERSTEIN GAN - GRADIENT PENALTY
-                        with tf.name_scope('image_gradient_penalty'):
-                            epsilon = tf.random.uniform([], name='epsilon')
-                            gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='image_gradient')
-                            image_critic_gradient_out = image_critic.get_output_for(gradient_image, None)
-                            image_gradients = tf.gradients(image_critic_gradient_out, gradient_image, name='image_gradients')
-                            image_gradients_norm = tf.norm(image_gradients[0], ord=2, name='image_gradient_norm')
-                            image_gradient_penalty = tf.square(image_gradients_norm -1)
-
-                    y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + args.gp_lambda*image_gradient_penalty
-                    y_critic_fake_loss = -fake_image_loss
+                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size, reals=images)
+                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size)
+                    # fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
+                    #
+                    # fake_image_critic_out = image_critic.get_output_for(fake_image, None, is_training=True)
+                    # real_image_critic_out = image_critic.get_output_for(real_image, None, is_training=True)
+                    # with tf.name_scope("fake_loss"):
+                    #     fake_image_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=fake_image_critic_out, \
+                    #         weights=1.0, scope='fake_image_loss')
+                    #
+                    # with tf.name_scope("real_loss"):
+                    #     real_image_critic_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=real_image_critic_out, \
+                    #         weights=1.0, scope='real_image_critic_loss')
+                    #
+                    #     fake_image_critic_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=fake_image_critic_out, \
+                    #         weights=1.0, scope='fake_image_critic_loss')
+                    #
+                    #     # WASSERSTEIN GAN - GRADIENT PENALTY
+                    #     with tf.name_scope('image_gradient_penalty'):
+                    #         epsilon = tf.random.uniform([], name='epsilon')
+                    #         gradient_image = tf.identity((epsilon * real_image + (1-epsilon) * fake_image), name='image_gradient')
+                    #         image_critic_gradient_out = image_critic.get_output_for(gradient_image, None)
+                    #         image_gradients = tf.gradients(image_critic_gradient_out, gradient_image, name='image_gradients')
+                    #         image_gradients_norm = tf.norm(image_gradients[0], ord=2, name='image_gradient_norm')
+                    #         image_gradient_penalty = tf.square(image_gradients_norm -1)
+                    #
+                    # y_critic_real_loss = -real_image_critic_loss + fake_image_critic_loss + args.gp_lambda*image_gradient_penalty
+                    # y_critic_fake_loss = -fake_image_loss
 
                 with tf.name_scope('final_losses'):
                     encoder_loss = regression_loss + z_critic_fake_loss
