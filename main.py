@@ -78,6 +78,7 @@ def main():
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
             encoded_latents = encoder.get_output_for(images)
+            import ipdb; ipdb.set_trace()
             if gpu_idx==0:
                 latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
             encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
