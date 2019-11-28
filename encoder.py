@@ -370,8 +370,10 @@ def E_basic(
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
-                    x = apply_bias(dense(x, fmaps=out_shape, gain=1, use_wscale=use_wscale))
-                    instance_aggregates.append(x)
+                    x = apply_bias(dense(x, fmaps=out_shape*(len(instance_aggregates)+2), gain=1, use_wscale=use_wscale))
+                    x = tf.reshape(x, [-1, len(instance_aggregates)+2, out_shape])
+                    instance_aggregates.append(x[:,0,:])
+                    x = x[:,1:,:]
             return x
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
@@ -379,8 +381,7 @@ def E_basic(
         x = fromrgb(images_in, resolution_log2)
         for res in range(resolution_log2, 2, -1):
             x = block(x, res)
-        _last_layer = block(x, 2)
-        features_out = tf.stack(instance_aggregates[::-1], axis=1)
+        features_out = block(x, 2)
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
@@ -393,8 +394,7 @@ def E_basic(
             y = fromrgb(img, res - 1)
             with tf.variable_scope('Grow_lod%d' % lod):
                 x = tflib.lerp_clip(x, y, lod_in - lod)
-        _last_layer = block(x, 2)
-        features_out = tf.stack(instance_aggregates[::-1], axis=1)
+        features_out = block(x, 2)
 
     # Recursive structure: complex but efficient.
     if structure == 'recursive':
@@ -406,9 +406,9 @@ def E_basic(
             x = block(x(), res); y = lambda: x
             if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
             return y()
-        _last_layer = grow(2, resolution_log2 - 2)
-        features_out = tf.stack(instance_aggregates[::-1], axis=1)
+        features_out = grow(2, resolution_log2 - 2)
 
+    features_out += tf.stack(instance_aggregates[::-1], axis=1)
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
     return features_out
