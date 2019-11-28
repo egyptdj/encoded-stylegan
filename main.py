@@ -26,19 +26,19 @@ def fp32(*values):
     values = tuple(tf.cast(v, tf.float32) for v in values)
     return values if len(values) >= 2 else values[0]
 
-def G_wgan(G, D, opt, minibatch_size): # pylint: disable=unused-argument
-    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+def G_wgan(G, D, opt, shape): # pylint: disable=unused-argument
+    latents = tf.random_normal(shape)
     fake_images_out = G.get_output_for(latents, None, is_training=True)
     fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
     loss = -fake_scores_out
     return loss
 
-def D_wgan_gp(G, D, opt, minibatch_size, reals, # pylint: disable=unused-argument
+def D_wgan_gp(G, D, opt, shape, reals, # pylint: disable=unused-argument
     wgan_lambda     = 10.0,     # Weight for the gradient penalty term.
     wgan_epsilon    = 0.001,    # Weight for the epsilon term, \epsilon_{drift}.
     wgan_target     = 1.0):     # Target value for gradient magnitudes.
 
-    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+    latents = tf.random_normal(shape)
     fake_images_out = G.get_output_for(latents, None, is_training=True)
     real_scores_out = fp32(D.get_output_for(reals*2.0-1.0, None, is_training=True))
     fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
@@ -239,8 +239,8 @@ def main():
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                    y_critic_real_loss, image_gradient_penalty, real_image_critic_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size, reals=images)
-                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size)
+                    y_critic_real_loss, image_gradient_penalty, real_image_critic_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], reals=images)
+                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]])
                     # fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
                     #
                     # fake_image_critic_out = image_critic.get_output_for(fake_image, None, is_training=True)
