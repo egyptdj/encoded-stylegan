@@ -29,7 +29,7 @@ def fp32(*values):
 def G_wgan(G, D, opt, shape): # pylint: disable=unused-argument
     latents = tf.random_normal(shape)
     fake_images_out = G.get_output_for(latents, None, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, None, is_training=True))
     loss = -fake_scores_out
     return loss
 
@@ -40,14 +40,14 @@ def D_wgan_gp(G, D, opt, shape, reals, # pylint: disable=unused-argument
 
     latents = tf.random_normal(shape)
     fake_images_out = G.get_output_for(latents, None, is_training=True)
-    real_scores_out = fp32(D.get_output_for(reals*2.0-1.0, None, is_training=True))
-    fake_scores_out = fp32(D.get_output_for(fake_images_out*2.0-1.0, None, is_training=True))
+    real_scores_out = fp32(D.get_output_for(reals, None, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, None, is_training=True))
     loss = fake_scores_out - real_scores_out
 
     with tf.name_scope('GradientPenalty'):
         mixing_factors = tf.random_uniform([shape[0], 1, 1, 1], 0.0, 1.0, dtype=fake_images_out.dtype)
         mixed_images_out = tflib.lerp(tf.cast(reals, fake_images_out.dtype), fake_images_out, mixing_factors)
-        mixed_scores_out = fp32(D.get_output_for(mixed_images_out*2.0-1.0, None, is_training=True))
+        mixed_scores_out = fp32(D.get_output_for(mixed_images_out, None, is_training=True))
         mixed_loss = opt.apply_loss_scaling(tf.reduce_sum(mixed_scores_out))
         mixed_grads = opt.undo_loss_scaling(fp32(tf.gradients(mixed_loss, [mixed_images_out])[0]))
         mixed_norms = tf.sqrt(tf.reduce_sum(tf.square(mixed_grads), axis=[1,2,3]))
@@ -241,7 +241,7 @@ def main():
 
                     y_critic_real_loss, image_gradient_penalty, real_image_critic_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], reals=images)
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]])
-                    # fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
+                    # fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)
                     #
                     # fake_image_critic_out = image_critic.get_output_for(fake_image, None, is_training=True)
                     # real_image_critic_out = image_critic.get_output_for(real_image, None, is_training=True)
