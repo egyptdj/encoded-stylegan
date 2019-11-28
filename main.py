@@ -147,7 +147,7 @@ def main():
 
                 with tf.name_scope('z_domain_loss'):
                     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                    fake_latent = generator.components.mapping.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0],tf.shape(encoded_latents)[2]]), name='z_rand'))
+                    fake_latent = generator.components.mapping.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0],tf.shape(encoded_latents)[2]]))
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
                     fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
