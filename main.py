@@ -81,7 +81,7 @@ def main():
             import ipdb; ipdb.set_trace()
             if gpu_idx==0:
                 latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
-            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+            encoded_images = generator.components.synthesis.get_output_for(encoded_latents+latent_manipulator, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
             tf.add_to_collection('KEY_NODES', latent_manipulator)
             tf.add_to_collection('KEY_NODES', encoded_latents)
             tf.add_to_collection('KEY_NODES', encoded_images)
@@ -147,7 +147,7 @@ def main():
 
                 with tf.name_scope('z_domain_loss'):
                     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                    fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
+                    fake_latent = generator.components.mapping.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0],tf.shape(encoded_latents)[2]]), name='z_rand'))
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
                     fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
@@ -201,7 +201,7 @@ def main():
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                    fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+                    fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
                     real_image = tf.identity(images, name='y_real')
 
                     fake_image_critic_out = image_critic.get_output_for(fake_image, None)
