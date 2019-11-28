@@ -48,6 +48,7 @@ def main():
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
         image_input = tf.placeholder(tf.float32, [None,3,1024,1024], name='image_input')
+        image_input = image_input*2.0-1.0
         gpu_image_input = tf.split(image_input, args.num_gpus, axis=0)
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
@@ -289,8 +290,8 @@ def main():
         _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='01_metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('encoder', encoder_learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('generator', generator_learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
-        original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose((image_input+1.0)/2.0, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose((tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0)+1.0)/2.0, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
