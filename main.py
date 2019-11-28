@@ -257,8 +257,8 @@ def main():
                     encoder_optimizer.register_gradients(encoder_loss, encoder.trainables)
 
                     print("================== GENERATOR VARS ==================")
-                    print("\n".join([v.name for v in [*generator.trainables.values()]]))
-                    generator_optimizer.register_gradients(generator_loss, generator.trainables)
+                    print("\n".join([v.name for v in [*generator.components.synthesis.trainables.values()]]))
+                    generator_optimizer.register_gradients(generator_loss, generator.components.synthesis.trainables)
 
                     print("================== Z_CRITIC VARS ==================")
                     print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
