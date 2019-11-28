@@ -70,7 +70,7 @@ def main():
 
     print('AUTOENCODING ON THE STYLE GAN')
     url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-    with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: _, _, Gs = pickle.load(f)
+    with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: G_, D_, Gs = pickle.load(f)
 
     # LOAD DATASET
     print("LOADING FFHQ DATASET")
@@ -78,7 +78,6 @@ def main():
     ffhq.configure(args.num_gpus*args.minibatch_size)
     get_images, get_labels = ffhq.get_minibatch_tf()
     get_images = tf.cast(get_images, tf.float32)/255.0
-    train_labelbatch = np.zeros([args.minibatch_size,0], np.float32)
 
     # PREPARE VALIDATION IMAGE BATCH
     image_list = [image for image in os.listdir(args.validation_dir) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
@@ -188,8 +187,8 @@ def main():
                     fake_latent = generator.components.mapping.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0],tf.shape(encoded_latents)[2]]), None)
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
-                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,512]), None)
-                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
+                    fake_latent_critic_out = latent_critic.get_output_for(tf.reshape(fake_latent, [-1,18,512]), None)
+                    real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,18,512]), None)
 
                     with tf.name_scope("fake_loss"):
                         fake_latent_loss = tf.losses.mean_squared_error(\
@@ -237,7 +236,8 @@ def main():
                     z_critic_fake_loss = fake_latent_loss
 
                 with tf.name_scope('y_domain_loss'):
-                    image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                    # image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                    image_critic = D_.clone('y_critic')
 
                     y_critic_real_loss, image_gradient_penalty, real_image_critic_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], reals=images)
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]])
