@@ -27,14 +27,9 @@ def main():
     tflib.init_tf()
     gpus = np.arange(args.num_gpus)
 
-    if args.progan:
-        print('AUTOENCODING ON THE PROGRESSIVE GAN')
-        url = os.path.join(args.cache_dir, 'karras2018iclr-celebahq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    else:
-        print('AUTOENCODING ON THE STYLE GAN')
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: _, _, Gs = pickle.load(f)
+    print('AUTOENCODING ON THE STYLE GAN')
+    url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+    with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: _, _, Gs = pickle.load(f)
 
     # LOAD DATASET
     print("LOADING FFHQ DATASET")
@@ -78,10 +73,7 @@ def main():
             # DEFINE ENCODER AND GENERATOR
             generator = Gs.clone(name='generator')
             # avg_generator = Gs.clone(name='avg_generator')
-            if args.progan:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure)
-            else:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure=args.structure)
+            encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=512, num_channels=3, resolution=1024, structure=args.structure)
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -161,36 +153,52 @@ def main():
                     real_latent_critic_out = latent_critic.get_output_for(tf.reshape(real_latent, [-1,512]), None)
 
                     with tf.name_scope("fake_loss"):
-                        fake_latent_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_latent_critic_out, \
-                            weights=1.0, scope='fake_latent_loss')
+                        fake_latent_loss = tf.losses.mean_squared_error(\
+                            labels=tf.ones_like(fake_latent_critic_out), \
+                            predictions=fake_latent_critic_out, \
+                            weights=0.5, scope='fake_latent_loss')
 
                     with tf.name_scope("real_loss"):
-                        real_latent_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=real_latent_critic_out, \
-                            weights=1.0, scope='real_latent_critic_loss')
+                        real_latent_critic_loss = tf.losses.mean_squared_error(\
+                            labels=tf.ones_like(real_latent_critic_out), \
+                            predictions=real_latent_critic_out, \
+                            weights=0.5, scope='discriminator_real_loss')
 
-                        fake_latent_critic_loss = tf.losses.compute_weighted_loss(\
-                            losses=fake_latent_critic_out, \
-                            weights=1.0, scope='fake_latent_critic_loss')
+                        fake_latent_critic_loss = tf.losses.mean_squared_error(\
+                            labels=tf.zeros_like(fake_latent_critic_out), \
+                            predictions=fake_latent_critic_out, \
+                            weights=0.5, scope='discriminator_fake_loss')
 
-                        # WASSERSTEIN GAN - GRADIENT PENALTY
-                        with tf.name_scope('latent_gradient_penalty'):
-                            epsilon = tf.random.uniform([], name='epsilon')
-                            gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='latent_gradient')
-                            latent_critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
-                            latent_gradients = tf.gradients(latent_critic_gradient_out, gradient_latent, name='latent_gradients')
-                            latent_gradients_norm = tf.norm(latent_gradients[0], ord=2, name='latent_gradient_norm')
-                            latent_gradient_penalty = tf.square(latent_gradients_norm -1)
+                    # with tf.name_scope("fake_loss"):
+                    #     fake_latent_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=fake_latent_critic_out, \
+                    #         weights=1.0, scope='fake_latent_loss')
+                    #
+                    # with tf.name_scope("real_loss"):
+                    #     real_latent_critic_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=real_latent_critic_out, \
+                    #         weights=1.0, scope='real_latent_critic_loss')
+                    #
+                    #     fake_latent_critic_loss = tf.losses.compute_weighted_loss(\
+                    #         losses=fake_latent_critic_out, \
+                    #         weights=1.0, scope='fake_latent_critic_loss')
+                    #
+                    #     # WASSERSTEIN GAN - GRADIENT PENALTY
+                    #     with tf.name_scope('latent_gradient_penalty'):
+                    #         epsilon = tf.random.uniform([], name='epsilon')
+                    #         gradient_latent = tf.identity((epsilon * real_latent + (1-epsilon) * fake_latent), name='latent_gradient')
+                    #         latent_critic_gradient_out = latent_critic.get_output_for(tf.reshape(gradient_latent, [-1,512]), None)
+                    #         latent_gradients = tf.gradients(latent_critic_gradient_out, gradient_latent, name='latent_gradients')
+                    #         latent_gradients_norm = tf.norm(latent_gradients[0], ord=2, name='latent_gradient_norm')
+                    #         latent_gradient_penalty = tf.square(latent_gradients_norm -1)
 
-                    z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + args.gp_lambda*latent_gradient_penalty
-                    z_critic_fake_loss = -fake_latent_loss
+                    # z_critic_real_loss = -real_latent_critic_loss + fake_latent_critic_loss + args.gp_lambda*latent_gradient_penalty
+                    # z_critic_fake_loss = -fake_latent_loss
+                    z_critic_real_loss = real_latent_critic_loss + fake_latent_critic_loss
+                    z_critic_fake_loss = fake_latent_loss
 
                 with tf.name_scope('y_domain_loss'):
-                    if args.progan:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=args.structure)
-                    else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                    image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
                     fake_image = generator.get_output_for(tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand'), empty_label, is_validation=True, use_noise=False, randomize_noise=False)
                     real_image = tf.identity(images, name='y_real')

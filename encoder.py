@@ -295,12 +295,28 @@ def minibatch_stddev_layer(x, group_size=4, num_new_features=1):
         y = tf.tile(y, [group_size, 1, s[2], s[3]])             # [NnHW]  Replicate over group and pixels.
         return tf.concat([x, y], axis=1)                        # [NCHW]  Append as new fmap.
 
+#-------------------------------------------------------------------------
+# Instance aggregation
+
+def instance_aggregation(x, shape=512, epsilon=1e-8):
+    assert len(x.shape) == 4
+    with tf.variable_scope('InstanceAggregation'):
+        orig_dtype = x.dtype
+        x = tf.cast(x, tf.float32)
+        x_mu = tf.reduce_mean(x, axis=[2,3])
+        epsilon = tf.constant(epsilon, dtype=x.dtype, name='epsilon')
+        x_sigma = tf.rsqrt(tf.reduce_mean(tf.square(x-x_mu), axis=[2,3]) + epsilon)
+        x = tf.concat([x_mu,x_sigma], axis=1)
+        x = apply_bias(dense(x, fmaps=shape, gain=1))
+        x = tf.cast(x, orig_dtype)
+        return x
+
 #----------------------------------------------------------------------------
 # Encoder based on the discriminator used in the StyleGAN paper.
 
 def E_basic(
     images_in,                          # First input: Images [minibatch, channel, height, width].
-    out_shape        = [512],        # Output shape
+    out_shape           = 512,        # Output shape
     num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
     resolution          = 32,           # Input resolution. Overridden based on dataset.
     fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
@@ -329,6 +345,7 @@ def E_basic(
     images_in = tf.cast(images_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     features_out = None
+    instance_aggregates = []
 
     # Building blocks.
     def fromrgb(x, res): # res = 2..resolution_log2
@@ -339,18 +356,22 @@ def E_basic(
             if res >= 3: # 8x8 and up
                 with tf.variable_scope('Conv0'):
                     x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    instance_aggregates.append(instance_aggregation(x, out_shape))
                 with tf.variable_scope('Conv1_down'):
                     x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
+                    instance_aggregates.append(instance_aggregation(x, out_shape))
+
             else: # 4x4
                 if mbstd_group_size > 1:
                     x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
                 with tf.variable_scope('Conv'):
                     x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                    instance_aggregates.append(instance_aggregation(x, out_shape))
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
-                    x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
-                    x = tf.reshape(x, [-1]+out_shape)
+                    x = apply_bias(dense(x, fmaps=out_shape, gain=1, use_wscale=use_wscale))
+                    instance_aggregates.append(x)
             return x
 
     # Fixed structure: simple and efficient, but does not support progressive growing.
@@ -358,7 +379,8 @@ def E_basic(
         x = fromrgb(images_in, resolution_log2)
         for res in range(resolution_log2, 2, -1):
             x = block(x, res)
-        features_out = block(x, 2)
+        _last_layer = block(x, 2)
+        features_out = tf.stack(instance_aggregates[::-1], axis=1)
 
     # Linear structure: simple but inefficient.
     if structure == 'linear':
@@ -371,7 +393,8 @@ def E_basic(
             y = fromrgb(img, res - 1)
             with tf.variable_scope('Grow_lod%d' % lod):
                 x = tflib.lerp_clip(x, y, lod_in - lod)
-        features_out = block(x, 2)
+        _last_layer = block(x, 2)
+        features_out = tf.stack(instance_aggregates[::-1], axis=1)
 
     # Recursive structure: complex but efficient.
     if structure == 'recursive':
@@ -383,7 +406,8 @@ def E_basic(
             x = block(x(), res); y = lambda: x
             if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
             return y()
-        features_out = grow(2, resolution_log2 - 2)
+        _last_layer = grow(2, resolution_log2 - 2)
+        features_out = tf.stack(instance_aggregates[::-1], axis=1)
 
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
