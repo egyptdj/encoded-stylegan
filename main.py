@@ -57,7 +57,7 @@ def D_wgan_gp(G, D, opt, minibatch_size, reals, # pylint: disable=unused-argumen
     with tf.name_scope('EpsilonPenalty'):
         epsilon_penalty = tf.square(real_scores_out)
     loss += epsilon_penalty * wgan_epsilon
-    return loss
+    return loss, gradient_penalty, real_scores_out
 
 
 def main():
@@ -239,7 +239,7 @@ def main():
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size, reals=images)
+                    y_critic_real_loss, image_gradient_penalty, real_image_critic_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size, reals=images)
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, minibatch_size=args.minibatch_size)
                     # fake_image = generator.get_output_for(tf.random.normal(shape=[tf.shape(encoded_latents)[0], tf.shape(encoded_latents)[2]], name='z_rand'), None, is_validation=True, use_noise=False, randomize_noise=False)*2.0-1.0
                     #
