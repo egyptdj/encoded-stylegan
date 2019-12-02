@@ -97,13 +97,13 @@ class TrainingSchedule:
         lod_initial_resolution  = 4,        # Image resolution used at the beginning.
         lod_training_kimg       = 600,      # Thousands of real images to show before doubling the resolution.
         lod_transition_kimg     = 600,      # Thousands of real images to show when fading in new layers.
-        minibatch_base          = 16,       # Maximum minibatch size, divided evenly among GPUs.
-        minibatch_dict          = {},       # Resolution-specific overrides.
-        max_minibatch_per_gpu   = {},       # Resolution-specific maximum minibatch size per GPU.
+        minibatch_base          = 4,       # Maximum minibatch size, divided evenly among GPUs.
+        minibatch_dict          = {4: 2, 8: 2, 16: 2, 32: 2, 64: 2, 128: 2, 256: 2, 512: 2, 1024: 2},       # Resolution-specific overrides.
+        max_minibatch_per_gpu   = {256: 16, 512: 8, 1024: 4},       # Resolution-specific maximum minibatch size per GPU.
         G_lrate_base            = 0.001,    # Learning rate for the generator.
-        G_lrate_dict            = {},       # Resolution-specific overrides.
+        G_lrate_dict            = {1024: 0.0015},       # Resolution-specific overrides.
         D_lrate_base            = 0.001,    # Learning rate for the discriminator.
-        D_lrate_dict            = {},       # Resolution-specific overrides.
+        D_lrate_dict            = {1024: 0.0015},       # Resolution-specific overrides.
         tick_kimg_base          = 160,      # Default interval of progress snapshots.
         tick_kimg_dict          = {4: 160, 8:140, 16:120, 32:100, 64:80, 128:60, 256:40, 512:20, 1024:10}): # Resolution-specific overrides.
 
@@ -124,9 +124,9 @@ class TrainingSchedule:
 
         # Minibatch size.
         self.minibatch = minibatch_dict.get(self.resolution, minibatch_base)
-        self.minibatch -= self.minibatch % config.num_gpus
+        self.minibatch -= self.minibatch % num_gpus
         if self.resolution in max_minibatch_per_gpu:
-            self.minibatch = min(self.minibatch, max_minibatch_per_gpu[self.resolution] * config.num_gpus)
+            self.minibatch = min(self.minibatch, max_minibatch_per_gpu[self.resolution] * num_gpus)
 
         # Other parameters.
         self.G_lrate = G_lrate_dict.get(self.resolution, G_lrate_base)
@@ -142,7 +142,7 @@ def train_progressive_autoencoder(
     D_repeats               = 1,            # How many times the discriminator is trained per G iteration.
     minibatch_repeats       = 4,            # Number of minibatches to run before adjusting training parameters.
     reset_opt_for_new_lod   = True,         # Reset optimizer internal state (e.g. Adam moments) when new layers are introduced?
-    total_kimg              = 15000,        # Total length of the training, measured in thousands of real images.
+    total_kimg              = 12000,        # Total length of the training, measured in thousands of real images.
     mirror_augment          = True,        # Enable mirror augment?
     drange_net              = [-1,1],       # Dynamic range used when feeding image data to the networks.
     image_snapshot_ticks    = 1,            # How often to export image snapshots?
@@ -165,7 +165,7 @@ def train_progressive_autoencoder(
             encoder, avg_encoder, generator, avg_generator, latent_critic, image_critic = misc.load_pkl(network_pkl)
         else:
             print('Constructing networks...')
-            encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=training_set.shape[1])
+            encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=training_set.shape[1], structure='linear')
             avg_encoder = encoder.clone('avg_encoder')
             generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', out_shape=[512], num_channels=3, resolution=training_set.shape[1])
             avg_generator = generator.clone('avg_generator')
@@ -180,17 +180,17 @@ def train_progressive_autoencoder(
         lod_in          = tf.placeholder(tf.float32, name='lod_in', shape=[])
         lrate_in        = tf.placeholder(tf.float32, name='lrate_in', shape=[])
         minibatch_in    = tf.placeholder(tf.int32, name='minibatch_in', shape=[])
-        minibatch_split = minibatch_in // config.num_gpus
+        minibatch_split = minibatch_in // num_gpus
         reals, labels   = training_set.get_minibatch_tf()
-        reals_split     = tf.split(reals, config.num_gpus)
-        labels_split    = tf.split(labels, config.num_gpus)
+        reals_split     = tf.split(reals, num_gpus)
+        labels_split    = tf.split(labels, num_gpus)
 
     encoder_optimizer = tflib.Optimizer(name='encoder_optimizer', learning_rate=lrate_in, beta1=0.0, beta2=0.99, epsilon=1e-8)
     generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=lrate_in, beta1=0.0, beta2=0.99, epsilon=1e-8)
     z_critic_optimizer = tflib.Optimizer(name='z_critic_optimizer', learning_rate=lrate_in, beta1=0.0, beta2=0.99, epsilon=1e-8)
     y_critic_optimizer = tflib.Optimizer(name='y_critic_optimizer', learning_rate=lrate_in, beta1=0.0, beta2=0.99, epsilon=1e-8)
 
-    for gpu in range(config.num_gpus):
+    for gpu in range(num_gpus):
         with tf.name_scope('GPU%d' % gpu), tf.device('/gpu:%d' % gpu):
             encoder_gpu = encoder if gpu == 0 else encoder.clone(encoder.name + '_shadow')
             generator_gpu = generator if gpu == 0 else generator.clone(generator.name + '_shadow')
@@ -393,9 +393,9 @@ def train_progressive_autoencoder(
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
         full_summary = tf.summary.merge_all()
 
-    os.makedirs(config.result_dir+'/model', exist_ok=True)
-    os.makedirs(config.result_dir+'/summary', exist_ok=True)
-    train_summary_writer = tf.summary.FileWriter(config.result_dir+'/summary/train')
+    os.makedirs(result_dir+'/model', exist_ok=True)
+    os.makedirs(result_dir+'/summary', exist_ok=True)
+    train_summary_writer = tf.summary.FileWriter(result_dir+'/summary/train')
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
 
@@ -409,7 +409,7 @@ def train_progressive_autoencoder(
     while cur_nimg < total_kimg * 1000:
 
         # Choose training parameters and configure training ops.
-        sched = TrainingSchedule(cur_nimg, training_set, **config.sched)
+        sched = TrainingSchedule(cur_nimg, training_set)
         training_set.configure(sched.minibatch, sched.lod)
         if reset_opt_for_new_lod:
             if np.floor(sched.lod) != np.floor(prev_lod) or np.ceil(sched.lod) != np.ceil(prev_lod):
@@ -450,23 +450,26 @@ def train_progressive_autoencoder(
 
             # Save snapshots.
             if cur_tick % network_snapshot_ticks == 0 or done:
-                misc.save_pkl((encoder, avg_encoder, generator, avg_generator, latent_critic, image_critic), os.path.join(config.result_dir, 'model', 'network-snapshot-%06d.pkl' % (cur_nimg // 1000)))
+                misc.save_pkl((encoder, avg_encoder, generator, avg_generator, latent_critic, image_critic), os.path.join(result_dir, 'model', 'network-snapshot-%06d.pkl' % (cur_nimg // 1000)))
 
             # Record start time of the next tick.
             tick_start_time = time.time()
 
     # Write final results.
-    misc.save_pkl((encoder, avg_encoder, generator, avg_generator, latent_critic, image_critic), os.path.join(config.result_dir, 'model', 'network-final.pkl'))
+    misc.save_pkl((encoder, avg_encoder, generator, avg_generator, latent_critic, image_critic), os.path.join(result_dir, 'model', 'network-final.pkl'))
 
 #----------------------------------------------------------------------------
 # Main entry point.
 # Calls the function indicated in config.py.
 
 if __name__ == "__main__":
-    np.random.seed(config.random_seed)
+    np.random.seed(1000)
     print('Initializing TensorFlow...')
-    os.environ.update(config.env)
-    tfutil.init_tf(config.tf_config)
+    # os.environ.update(config.env)
+    num_gpus = 1
+    result_dir = 'results/progressive_test'
+
+    tfutil.init_tf({'graph_options.place_pruned_graph': True})
     print('Running')
     coeff_lambda = dict(l2=1.0, l1=0.0, vgg=0.0, lpips=0.0, mssim=0.0, logcosh=0.0, gp=10)
     train_progressive_autoencoder()
