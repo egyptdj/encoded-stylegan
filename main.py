@@ -155,6 +155,7 @@ def main():
                     fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
                     real_latent = tf.identity(encoded_latents, name='z_real')
 
+                    import ipdb; ipdb.set_trace()
                     z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=tf.identity(images, name='z_real'))
                     z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=tf.random_normal(shape=tf.shape(encoded_latents)))
 
