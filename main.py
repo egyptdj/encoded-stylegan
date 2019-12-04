@@ -78,7 +78,7 @@ def main():
             # avg_generator = Gs.clone(name='avg_generator')
             encoders = []
             generators = []
-            for lod in range(2, 11):
+            for lod in range(10, 1, -1):
                 encoders.append(tflib.Network("encoder{}x{}".format(lod**2, lod**2), func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=lod**2))
                 generators.append(tflib.Network("generator{}x{}".format(lod**2, lod**2), func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=lod**2))
             generators = generators[::-1]
