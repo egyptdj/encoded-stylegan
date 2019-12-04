@@ -198,12 +198,12 @@ def main():
 
                 with tf.name_scope('backprop'):
                     print("================== ENCODER VARS ==================")
-                    print("\n".join([v.name for v in [*encoder.trainables.values()]]))
-                    encoder_optimizer.register_gradients(encoder_loss, encoder.trainables)
+                    print("\n".join([v.name for v in [*generator.trainables.values() for generator in generators]]))
+                    encoder_optimizer.register_gradients(encoder_loss, [*encoder.trainables.values() for encoder in encoders])
 
                     print("================== GENERATOR VARS ==================")
-                    print("\n".join([v.name for v in [*generator.trainables.values()]]))
-                    generator_optimizer.register_gradients(generator_loss, generator.trainables)
+                    print("\n".join([v.name for v in [*generator.trainables.values() for generator in generators]]))
+                    generator_optimizer.register_gradients(generator_loss, [*generator.trainables.values() for generator in generators])
 
                     print("================== Z_CRITIC VARS ==================")
                     print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
