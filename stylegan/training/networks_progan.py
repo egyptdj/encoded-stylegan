@@ -167,6 +167,7 @@ def G_paper(
     **_kwargs):                         # Ignore unrecognized keyword args.
 
     resolution_log2 = int(np.log2(resolution))
+    import ipdb; ipdb.set_trace()
     assert resolution == 2**resolution_log2 and resolution >= 4
     def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
     def PN(x): return pixel_norm(x, epsilon=pixelnorm_epsilon) if use_pixelnorm else x
