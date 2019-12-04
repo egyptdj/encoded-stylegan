@@ -175,6 +175,7 @@ def G_paper(
     act = leaky_relu if use_leakyrelu else tf.nn.relu
 
     combo_in = tf.cast(latents_in, dtype)
+    import ipdb; ipdb.set_trace()
     if resolution_log2 == 2:
         combo_in.set_shape([None, combo_in.shape[1]])
     else:
