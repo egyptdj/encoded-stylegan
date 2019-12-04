@@ -176,6 +176,7 @@ def main():
                     tf.add_to_collection("LOSS_Y_CRITIC_REAL", y_critic_real_loss)
                     tf.add_to_collection("LOSS_Z_CRITIC_FAKE", z_critic_fake_loss)
                     tf.add_to_collection("LOSS_Y_CRITIC_FAKE", y_critic_fake_loss)
+                import ipdb; ipdb.set_trace()
 
                 with tf.name_scope('metrics'):
                     psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
