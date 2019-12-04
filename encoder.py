@@ -389,6 +389,7 @@ def E_basic(
 
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
-    return features_out, encoder_features
+    encoder_features.append(features_out)
+    return encoder_features
 
 #----------------------------------------------------------------------------

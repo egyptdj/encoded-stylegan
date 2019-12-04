@@ -242,7 +242,8 @@ def G_paper(
 
     assert images_out.dtype == tf.as_dtype(dtype)
     images_out = tf.identity(images_out, name='images_out')
-    return images_out, generator_features
+    generator_features.append(images_out)
+    return generator_features
 
 
 def D_paper(

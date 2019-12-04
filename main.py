@@ -83,8 +83,10 @@ def main():
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
-            encoded_latents, encoder_features = encoder.get_output_for(images)
-            encoded_images, generator_features = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+            encoder_features = encoder.get_output_for(images)
+            encoded_latents = encoder_features.pop()
+            generator_features = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+            generator_features = generator_features.pop()
             # if gpu_idx==0:
             #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
             # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
