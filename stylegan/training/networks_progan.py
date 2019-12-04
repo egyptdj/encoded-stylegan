@@ -208,6 +208,7 @@ def G_paper(
         with tf.variable_scope('ToRGB_lod%d' % lod):
             return apply_bias(conv2d(x, fmaps=num_channels, kernel=1, gain=1, use_wscale=use_wscale))
 
+    generator_features = []
     # Linear structure: simple but inefficient.
     if structure == 'linear':
         x = block(combo_in, 2)
@@ -232,16 +233,16 @@ def G_paper(
 
     if structure == 'fixed':
         x = block(combo_in, 2)
-        tf.add_to_collection('GENERATOR_FEATURES', x)
+        generator_features.append(x)
         for res in range(3, resolution_log2 + 1):
             x = block(x, res)
-            if not res==resolution_log2: tf.add_to_collection('GENERATOR_FEATURES', x)
+            if not res==resolution_log2: generator_features.append(x)
         images_out = torgb(x, res)
 
 
     assert images_out.dtype == tf.as_dtype(dtype)
     images_out = tf.identity(images_out, name='images_out')
-    return images_out
+    return images_out, generator_features
 
 
 def D_paper(

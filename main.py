@@ -83,8 +83,8 @@ def main():
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
-            encoded_latents = encoder.get_output_for(images)
-            encoded_images = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+            encoded_latents, encoder_features = encoder.get_output_for(images)
+            encoded_images, generator_features = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
             # if gpu_idx==0:
             #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
             # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
@@ -105,15 +105,13 @@ def main():
                 with tf.name_scope('features_loss'):
                     feature_loss = 0.0
 
-                    encoder_features = tf.get_collection('ENCODER_FEATURES')
-                    generator_features = tf.get_collection('GENERATOR_FEATURES')[::-1]
-                    for e_feat, g_feat in zip(encoder_features, generator_features):
+                    for e_feat, g_feat in zip(encoder_features, generator_features[::-1]):
                         feature_loss += MSE(e_feat, g_feat)
 
 
                 with tf.name_scope('regression_loss'):
-                    # regression_loss = tf.identity(feature_loss)
-                    regression_loss = 0.0
+                    regression_loss = tf.identity(feature_loss)
+                    # regression_loss = 0.0
 
                     # L2 Loss
                     if args.l2_lambda > 0.0:

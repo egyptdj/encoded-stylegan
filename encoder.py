@@ -353,12 +353,13 @@ def E_basic(
                     x = tf.reshape(x, [-1]+out_shape)
             return x
 
+    encoder_features =[]
     # Fixed structure: simple and efficient, but does not support progressive growing.
     if structure == 'fixed':
         x = fromrgb(images_in, resolution_log2)
         for res in range(resolution_log2, 2, -1):
             x = block(x, res)
-            tf.add_to_collection('ENCODER_FEATURES', x)
+            encoder_features.append(x)
         features_out = block(x, 2)
 
     # Linear structure: simple but inefficient.
@@ -388,6 +389,6 @@ def E_basic(
 
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
-    return features_out
+    return features_out, encoder_features
 
 #----------------------------------------------------------------------------
