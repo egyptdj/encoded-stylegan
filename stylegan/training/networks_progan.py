@@ -175,7 +175,10 @@ def G_paper(
     act = leaky_relu if use_leakyrelu else tf.nn.relu
 
     combo_in = tf.cast(latents_in, dtype)
-    combo_in.set_shape(combo_in.shape)
+    if resolution_log2 == 2:
+        combo_in.set_shape([None, combo_in.shape[1]])
+    else:
+        combo_in.set_shape([None, combo_in.shape[1], combo_in.shape[2], combo_in.shape[3]])
     images_out = None
 
     # Building blocks.

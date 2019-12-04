@@ -325,7 +325,7 @@ def E_basic(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
     out_fmap = np.prod(out_shape)
 
-    images_in.set_shape(images_in.shape)
+    images_in.set_shape([None, images_in.shape[1], images_in.shape[2], images_in.shape[3]])
     images_in = tf.cast(images_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     features_out = None
