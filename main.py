@@ -55,9 +55,9 @@ def main():
         encoder_learning_rate = tf.placeholder(tf.float32, [], name='encoder_learning_rate')
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
         # Gs_beta = 0.5 ** tf.div(tf.cast(args.minibatch_size*args.num_gpus, tf.float32), 10000.0)
-        tf.add_to_collection('KEY_NODES', image_input)
-        tf.add_to_collection('KEY_NODES', encoder_learning_rate)
-        tf.add_to_collection('KEY_NODES', generator_learning_rate)
+        # tf.add_to_collection('KEY_NODES', image_input)
+        # tf.add_to_collection('KEY_NODES', encoder_learning_rate)
+        # tf.add_to_collection('KEY_NODES', generator_learning_rate)
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimizers'):
@@ -84,13 +84,14 @@ def main():
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
             encoded_latents = encoder.get_output_for(images)
-            if gpu_idx==0:
-                latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
-            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
-            tf.add_to_collection('KEY_NODES', latent_manipulator)
-            tf.add_to_collection('KEY_NODES', encoded_latents)
-            tf.add_to_collection('KEY_NODES', encoded_images)
-            tf.add_to_collection('IMAGE_ENCODED', encoded_images)
+            encoded_images = generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False)
+            # if gpu_idx==0:
+            #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
+            # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
+            # tf.add_to_collection('KEY_NODES', latent_manipulator)
+            # tf.add_to_collection('KEY_NODES', encoded_latents)
+            # tf.add_to_collection('KEY_NODES', encoded_images)
+            # tf.add_to_collection('IMAGE_ENCODED', encoded_images)
             """ images is the X and Y domain,
                 encoded_latents is the z domain,
                 encoder is the mapping E,
@@ -111,7 +112,8 @@ def main():
 
 
                 with tf.name_scope('regression_loss'):
-                    regression_loss = tf.identity(feature_loss)
+                    # regression_loss = tf.identity(feature_loss)
+                    regression_loss = 0.0
 
                     # L2 Loss
                     if args.l2_lambda > 0.0:
