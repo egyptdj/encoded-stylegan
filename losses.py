@@ -43,6 +43,7 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
     return loss
 
 def G_lsgan(G, D, opt, latents, labels):
+    import ipdb; ipdb.set_trace()
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
     fake_scores_out = fp32(D.get_output_for(fake_images_out[0], labels, is_training=True))
     loss = 0.5 * tf.losses.mean_squared_error(labels=tf.ones_like(fake_scores_out), predictions=fake_scores_out)
