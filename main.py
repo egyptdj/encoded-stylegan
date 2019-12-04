@@ -8,6 +8,8 @@ import PIL.Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'progan'))
+
+from collections import OrderedDict
 from tqdm import tqdm
 from vgg import Vgg16
 from losses import *
@@ -197,13 +199,21 @@ def main():
                     tf.add_to_collection('METRIC_SSIM', ssim)
 
                 with tf.name_scope('backprop'):
+                    encoder_trainables = OrderedDict()
+                    generator_trainables = OrderedDict()
+
+                    for encoder in encoders:
+                        encoder_trainables.update(encoder.trainables)
                     print("================== ENCODER VARS ==================")
-                    print([*encoder.trainables.values() for encoder in encoders])
-                    encoder_optimizer.register_gradients(encoder_loss, [*encoder.trainables.values() for encoder in encoders])
+                    print("\n".join([v.name for v in [*encoder_trainables.values()]])
+                    encoder_optimizer.register_gradients(encoder_loss, encoder_trainables)
 
                     print("================== GENERATOR VARS ==================")
-                    print([*generator.trainables.values() for generator in generators])
-                    generator_optimizer.register_gradients(generator_loss, [*generator.trainables.values() for generator in generators])
+
+                    for generator in generators:
+                        generator_trainables.update(generator.trainables)
+                    print("\n".join([v.name for v in [*generator_trainables.values()]]))
+                    generator_optimizer.register_gradients(generator_loss, generator_trainables)
 
                     print("================== Z_CRITIC VARS ==================")
                     print("\n".join([v.name for v in [*latent_critic.trainables.values()]]))
