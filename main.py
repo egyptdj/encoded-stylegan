@@ -91,7 +91,7 @@ def main():
             # tf.add_to_collection('KEY_NODES', latent_manipulator)
             # tf.add_to_collection('KEY_NODES', encoded_latents)
             # tf.add_to_collection('KEY_NODES', encoded_images)
-            # tf.add_to_collection('IMAGE_ENCODED', encoded_images)
+            tf.add_to_collection('IMAGE_ENCODED', encoded_images)
             """ images is the X and Y domain,
                 encoded_latents is the z domain,
                 encoder is the mapping E,
