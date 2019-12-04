@@ -170,16 +170,16 @@ def G_paper(
     assert resolution == 2**resolution_log2 and resolution >= 4
     def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
     def PN(x): return pixel_norm(x, epsilon=pixelnorm_epsilon) if use_pixelnorm else x
-    if latent_size is None: latent_size = nf(0)
+    if latent_size is None: latent_size = 512
     if structure is None: structure = 'linear' if is_template_graph else 'recursive'
     act = leaky_relu if use_leakyrelu else tf.nn.relu
 
     combo_in = tf.cast(latents_in, dtype)
-    import ipdb; ipdb.set_trace()
     if resolution_log2 == 2:
-        combo_in.set_shape([None, combo_in.shape[1]])
+        combo_in.set_shape([None, latent_size])
     else:
-        combo_in.set_shape([None, combo_in.shape[1], combo_in.shape[2], combo_in.shape[3]])
+        combo_in.set_shape([None, nf(resolution_log2-2), resolution//2, resolution//2])
+    import ipdb; ipdb.set_trace()
     images_out = None
 
     # Building blocks.

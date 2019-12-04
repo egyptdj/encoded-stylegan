@@ -325,10 +325,12 @@ def E_basic(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
     out_fmap = np.prod(out_shape)
 
+    if resolution_log2==10:
+        images_in.set_shape([None, 3, resolution//2, resolution//2])
+    else:
+        images_in.set_shape([None, nf(resolution_log2-1), resolution//2, resolution//2])
     import ipdb; ipdb.set_trace()
-    images_in.set_shape([None, images_in.shape[1], images_in.shape[2], images_in.shape[3]])
     images_in = tf.cast(images_in, dtype)
-    lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     features_out = None
 
     # Building blocks.
@@ -354,7 +356,7 @@ def E_basic(
                     x = tf.reshape(x, [-1]+out_shape)
             return x
 
-    if resolution_log2 == 2:
+    if resolution_log2 == 10:
         x = fromrgb(images_in, resolution_log2)
     else:
         x = images_in
