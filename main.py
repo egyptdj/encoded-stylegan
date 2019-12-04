@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'progan'))
 from tqdm import tqdm
 from vgg import Vgg16
-from loss import *
+from losses import *
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training import dataset
@@ -148,7 +148,6 @@ def main():
                         logcosh_loss = tf.keras.losses.logcosh(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]))
                         tf.add_to_collection('LOSS_LOGCOSH', logcosh_loss)
                         regression_loss += args.logcosh_lambda*logcosh_loss
-
 
                 with tf.name_scope('z_domain_loss'):
                     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)

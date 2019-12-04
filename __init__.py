@@ -1,2 +1,2 @@
 from stylegan import dnnlib
-from . import loss
+from . import losses
