@@ -162,7 +162,7 @@ def main():
                         image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label)
-                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), reals=tf.identity(images, name='y_real'))
+                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label, reals=tf.identity(images, name='y_real'))
 
                 with tf.name_scope('final_losses'):
                     encoder_loss = regression_loss + z_critic_fake_loss
