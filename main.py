@@ -125,7 +125,7 @@ def main():
 
                 with tf.name_scope('regression_loss'):
                     regression_loss = 0.0
-                    regression_loss += feature_loss
+                    regression_loss += args.feature_lambda*feature_loss
 
                     # L2 Loss
                     if args.l2_lambda > 0.0:
