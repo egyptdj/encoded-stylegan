@@ -326,9 +326,9 @@ def E_basic(
     out_fmap = np.prod(out_shape)
 
     if resolution_log2==10:
-        images_in.set_shape([None, 3, resolution//2, resolution//2])
+        images_in.set_shape([None, 3, resolution, resolution])
     else:
-        images_in.set_shape([None, nf(resolution_log2-1), resolution//2, resolution//2])
+        images_in.set_shape([None, nf(resolution_log2-1), resolution, resolution])
     import ipdb; ipdb.set_trace()
     images_in = tf.cast(images_in, dtype)
     features_out = None
