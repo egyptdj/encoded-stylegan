@@ -1,6 +1,5 @@
 import tensorflow as tf
 import stylegan.dnnlib.tflib as tflib
-from stylegan.dnnlib.tflib.autosummary import autosummary
 
 def G_wgan(G, D, opt, latent_shape): # pylint: disable=unused-argument
     latents = tf.random_normal(latent_shape)
@@ -34,7 +33,6 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
         epsilon_penalty = tf.square(real_scores_out)
     loss += epsilon_penalty * wgan_epsilon
     return loss
-
 
 def G_lsgan(G, D, opt, latents):
     fake_images_out = G.get_output_for(latents, None, is_training=True)

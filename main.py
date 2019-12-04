@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'stylegan'))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'progan'))
 from tqdm import tqdm
 from vgg import Vgg16
-from loss import G_wgan, D_wgan_gp
+from loss import *
 from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training import dataset
