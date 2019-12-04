@@ -77,11 +77,11 @@ def main():
             # generator = Gs.clone(name='generator')
             # avg_generator = Gs.clone(name='avg_generator')
             if args.progan:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure)
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=1024, structure=args.structure)
+                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure='fixed')
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=1024, structure='fixed')
             else:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure=args.structure)
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_synthesis', num_channels=3, resolution=1024, structure=args.structure)
+                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure='fixed')
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_synthesis', num_channels=3, resolution=1024, structure='fixed')
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -169,9 +169,9 @@ def main():
 
                 with tf.name_scope('y_domain_loss'):
                     if args.progan:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=args.structure)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure='fixed')
                     else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure='fixed')
 
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label)
                     y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label, reals=tf.identity(images, name='y_real'))

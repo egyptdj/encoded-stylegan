@@ -232,6 +232,7 @@ def G_paper(
 
     if structure == 'fixed':
         x = block(combo_in, 2)
+        tf.add_to_collection('GENERATOR_FEATURES', x)
         for res in range(3, resolution_log2 + 1):
             x = block(x, res)
             if not res==resolution_log2: tf.add_to_collection('GENERATOR_FEATURES', x)
