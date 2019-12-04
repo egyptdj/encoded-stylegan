@@ -113,7 +113,7 @@ def main():
                 with tf.name_scope('features_loss'):
                     feature_loss = 0.0
 
-                    for e_feat, g_feat in zip(encoder_features[], generator_features):
+                    for e_feat, g_feat in zip(encoder_features, generator_features):
                         feature_loss += MSE(e_feat, g_feat)
 
                 with tf.name_scope('regression_loss'):
