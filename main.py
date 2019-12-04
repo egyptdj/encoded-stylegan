@@ -108,7 +108,7 @@ def main():
 
                     encoder_features = tf.get_collection('ENCODER_FEATURES')
                     generator_features = tf.get_collection('GENERATOR_FEATURES')[::-1]
-
+                    import ipdb; ipdb.set_trace()
                     for e_feat, g_feat in zip(encoder_features, generator_features):
                         feature_loss += MSE(e_feat, g_feat)
 

@@ -19,7 +19,7 @@ def parse():
     parser.add_argument('--lpips_lambda', type=float, default=0.0, help='lpips coefficient')
     parser.add_argument('--mssim_lambda', type=float, default=0.0, help='mssim coefficient')
     parser.add_argument('--logcosh_lambda', type=float, default=0.0, help='logcosh coefficient')
-    parser.add_argument('-st', '--structure', type=str, default='recursive', help='structure choice')
+    parser.add_argument('-st', '--structure', type=str, default='fixed', help='structure choice')
     parser.add_argument('-dD', '--data_dir', type=str, default='/media/bispl/workdisk/FFHQ_flickrface/tfrecords', help='directory path to load dataset')
     parser.add_argument('-dV', '--validation_dir', type=str, default='images/validation', help='directory path to load dataset')
     parser.add_argument('-dR', '--result_dir', type=str, default='results', help='directory path to save the trained model and/or the resulting image')
