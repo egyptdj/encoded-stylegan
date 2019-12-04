@@ -121,10 +121,11 @@ def main():
 
                     for e_feat, g_feat in zip(encoder_features, generator_features):
                         feature_loss += MSE(e_feat, g_feat)
+                    tf.add_to_collection('LOSS_FEATURE', feature_loss)
 
                 with tf.name_scope('regression_loss'):
-                    regression_loss = tf.identity(feature_loss)
-                    # regression_loss = 0.0
+                    regression_loss = 0.0
+                    regression_loss += feature_loss
 
                     # L2 Loss
                     if args.l2_lambda > 0.0:
@@ -230,6 +231,7 @@ def main():
 
     with tf.name_scope('summary'):
         _ = tf.summary.scalar('regression', tf.reduce_mean(tf.get_collection('LOSS_REGRESSION')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.scalar('feature', tf.reduce_mean(tf.get_collection('LOSS_FEATURE')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.l2_lambda > 0.0: _ = tf.summary.scalar('l2', tf.reduce_mean(tf.get_collection('LOSS_L2')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.l1_lambda > 0.0: _ = tf.summary.scalar('l1', tf.reduce_mean(tf.get_collection('LOSS_L1')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         if args.vgg_lambda > 0.0: _ = tf.summary.scalar('vgg', tf.reduce_mean(tf.get_collection('LOSS_VGG')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
