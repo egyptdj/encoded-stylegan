@@ -230,6 +230,14 @@ def G_paper(
             return img()
         images_out = grow(combo_in, 2, resolution_log2 - 2)
 
+    if structure == 'fixed':
+        x = block(combo_in, 2)
+        for res in range(3, resolution_log2 + 1):
+            x = block(x, res)
+            if not res==resolution_log2: tf.add_to_collection('GENERATOR_FEATURES', x)
+        images_out = torgb(x, res)
+
+
     assert images_out.dtype == tf.as_dtype(dtype)
     images_out = tf.identity(images_out, name='images_out')
     return images_out
@@ -314,6 +322,13 @@ def D_paper(
             if res > 2: y = cset(y, (lod_in > lod), lambda: lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
             return y()
         scores_out = grow(2, resolution_log2 - 2)
+
+    if structure == 'fixed':
+        img = images_in
+        x = fromrgb(img, resolution_log2)
+        for res in range(resolution_log2, 2, -1):
+            x = block(x, res)
+        scores_out = block(x, 2)
 
     assert scores_out.dtype == tf.as_dtype(dtype)
     scores_out = tf.identity(scores_out, name='scores_out')

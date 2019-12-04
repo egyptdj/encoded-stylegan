@@ -358,6 +358,7 @@ def E_basic(
         x = fromrgb(images_in, resolution_log2)
         for res in range(resolution_log2, 2, -1):
             x = block(x, res)
+            tf.add_to_collection('ENCODER_FEATURES', x)
         features_out = block(x, 2)
 
     # Linear structure: simple but inefficient.

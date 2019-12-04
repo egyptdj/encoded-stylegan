@@ -25,14 +25,14 @@ def main():
     tflib.init_tf()
     gpus = np.arange(args.num_gpus)
 
-    if args.progan:
-        print('AUTOENCODING ON THE PROGRESSIVE GAN')
-        url = os.path.join(args.cache_dir, 'karras2018iclr-celebahq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
-    else:
-        print('AUTOENCODING ON THE STYLE GAN')
-        url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
-        with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: _, _, Gs = pickle.load(f)
+    # if args.progan:
+    #     print('AUTOENCODING ON THE PROGRESSIVE GAN')
+    #     url = os.path.join(args.cache_dir, 'karras2018iclr-celebahq-1024x1024.pkl')
+    #     with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+    # else:
+    #     print('AUTOENCODING ON THE STYLE GAN')
+    #     url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
+    #     with dnnlib.util.open_url(url, cache_dir=args.cache_dir) as f: _, _, Gs = pickle.load(f)
 
     # LOAD DATASET
     print("LOADING FFHQ DATASET")
@@ -74,12 +74,14 @@ def main():
             print("CONSTRUCTING MODEL WITH GPU: {}".format(gpu_idx))
 
             # DEFINE ENCODER AND GENERATOR
-            generator = Gs.clone(name='generator')
+            # generator = Gs.clone(name='generator')
             # avg_generator = Gs.clone(name='avg_generator')
             if args.progan:
                 encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure=args.structure)
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=1024, structure=args.structure)
             else:
                 encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure=args.structure)
+                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_synthesis', num_channels=3, resolution=1024, structure=args.structure)
 
             # CONSTRUCT NETWORK
             images = gpu_image_input[gpu_idx]
@@ -101,8 +103,18 @@ def main():
                 MSE = tf.keras.losses.MeanSquaredError()
                 MAE = tf.keras.losses.MeanAbsoluteError()
 
+                with tf.name_scope('features_loss'):
+                    feature_loss = 0.0
+
+                    encoder_features = tf.get_collection('ENCODER_FEATURES')
+                    generator_features = tf.get_collection('GENERATOR_FEATURES')[::-1]
+
+                    for e_feat, g_feat in zip(encoder_features, generator_features):
+                        feature_loss += MSE(e_feat, g_feat)
+
+
                 with tf.name_scope('regression_loss'):
-                    regression_loss = 0.0
+                    regression_loss = tf.identity(feature_loss)
 
                     # L2 Loss
                     if args.l2_lambda > 0.0:
