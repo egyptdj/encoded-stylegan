@@ -9,10 +9,10 @@ def fp32(*values):
     return values if len(values) >= 2 else values[0]
 
 
-def G_wgan(G, D, opt, latent_shape): # pylint: disable=unused-argument
+def G_wgan(G, D, opt, latent_shape, labels): # pylint: disable=unused-argument
     latents = tf.random_normal(latent_shape)
-    fake_images_out = G.get_output_for(latents, None, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out, None, is_training=True))
+    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = -fake_scores_out
     return loss
 
@@ -42,9 +42,9 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
     loss += epsilon_penalty * wgan_epsilon
     return loss
 
-def G_lsgan(G, D, opt, latents):
-    fake_images_out = G.get_output_for(latents, None, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out, None, is_training=True))
+def G_lsgan(G, D, opt, latents, labels):
+    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = 0.5 * tf.losses.mean_squared_error(labels=tf.ones_like(fake_scores_out), predictions=fake_scores_out)
     return loss
 
