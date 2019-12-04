@@ -40,14 +40,11 @@ def main():
     ffhq.configure(args.num_gpus*args.minibatch_size)
     get_images, get_labels = ffhq.get_minibatch_tf()
     get_images = tf.cast(get_images, tf.float32)/255.0
-    empty_label = tf.placeholder(tf.float32, shape=[None,0], name='empty_label')
-    train_labelbatch = np.zeros([args.minibatch_size,0], np.float32)
 
     # PREPARE VALIDATION IMAGE BATCH
     image_list = [image for image in os.listdir(args.validation_dir) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
     assert len(image_list)>0
     val_imbatch = np.transpose(np.stack([np.array(PIL.Image.open(args.validation_dir+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
-    val_labelbatch = np.zeros([len(image_list)//args.num_gpus,0], np.float32)
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
@@ -57,7 +54,6 @@ def main():
         generator_learning_rate = tf.placeholder(tf.float32, [], name='generator_learning_rate')
         # Gs_beta = 0.5 ** tf.div(tf.cast(args.minibatch_size*args.num_gpus, tf.float32), 10000.0)
         tf.add_to_collection('KEY_NODES', image_input)
-        tf.add_to_collection('KEY_NODES', empty_label)
         tf.add_to_collection('KEY_NODES', encoder_learning_rate)
         tf.add_to_collection('KEY_NODES', generator_learning_rate)
 
@@ -88,7 +84,7 @@ def main():
             encoded_latents = encoder.get_output_for(images)
             if gpu_idx==0:
                 latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
-            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, empty_label, is_validation=True, use_noise=False, randomize_noise=False)
+            encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
             tf.add_to_collection('KEY_NODES', latent_manipulator)
             tf.add_to_collection('KEY_NODES', encoded_latents)
             tf.add_to_collection('KEY_NODES', encoded_images)
@@ -172,8 +168,8 @@ def main():
                     else:
                         image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure='fixed')
 
-                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label)
-                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=empty_label, reals=tf.identity(images, name='y_real'))
+                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None)
+                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None, reals=tf.identity(images, name='y_real'))
 
                 with tf.name_scope('final_losses'):
                     encoder_loss = regression_loss + z_critic_fake_loss
@@ -256,27 +252,27 @@ def main():
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_images)
         for _ in range(args.encoder_iter):
-            _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+            _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
             for _ in range(args.latent_critic_iter):
-                _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, empty_label: train_labelbatch})
+                _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
 
         for _ in range(args.generator_iter):
-            _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+            _ = sess.run(generator_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
             for _ in range(args.image_critic_iter):
-                _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+                _ = sess.run(y_critic_optimize, feed_dict={image_input: train_imbatch, generator_learning_rate: generator_lr})
 
-        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: train_labelbatch})
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
         train_summary_writer.add_summary(train_scalar_summary, iter)
-        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr, empty_label: val_labelbatch})
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, encoder_learning_rate: encoder_lr, generator_learning_rate: generator_lr})
         val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%args.save_iter==0:
-            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
+            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
-            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch})
             val_summary_writer.add_summary(val_image_summary, iter)
             if iter==0:
-                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+                val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch})
                 val_summary_writer.add_summary(val_original_image_summary, iter)
 
             save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
