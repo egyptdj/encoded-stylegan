@@ -84,9 +84,10 @@ def main():
                 generators.append(tflib.Network("generator{}x{}".format(2**lod, 2**lod), func_name='stylegan.training.networks_progan.G_paper', latent_size=512, num_channels=3, resolution=2**lod))
 
             # CONSTRUCT NETWORK
-            x = gpu_image_input[gpu_idx]
+            images = gpu_image_input[gpu_idx]
             encoder_features = []
             generator_features = []
+            x = tf.identity(images)
             for encoder in encoders:
                 x = encoder.get_output_for(x)
                 encoder_features.append(x)
