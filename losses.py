@@ -25,7 +25,7 @@ def D_wgan_gp(fake, D, opt, latent_shape, reals, labels=None, # pylint: disable=
     loss = fake_scores_out - real_scores_out
 
     with tf.name_scope('GradientPenalty'):
-        mixing_factors = tf.random_uniform([latent_shape[0], 1, 1, 1], 0.0, 1.0, dtype=fakefake.dtype)
+        mixing_factors = tf.random_uniform([latent_shape[0], 1, 1, 1], 0.0, 1.0, dtype=fake.dtype)
         mixed_images_out = tflib.lerp(tf.cast(reals, fake.dtype), fake, mixing_factors)
         mixed_scores_out = fp32(D.get_output_for(mixed_images_out, labels, is_training=True))
         mixed_loss = opt.apply_loss_scaling(tf.reduce_sum(mixed_scores_out))
