@@ -90,11 +90,11 @@ def main():
             for encoder in encoders:
                 x = encoder.get_output_for(x)
                 encoder_features.append(x)
-            encoded_latents = x
+            encoded_latents = encoder_features.pop()
             for generator in generators:
                 x = generator.get_output_for(x)
                 generator_features.append(x)
-            encoded_images = x
+            encoded_images = generator_features.pop()
             generator_features = generator_features[::-1]
             # if gpu_idx==0:
             #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
