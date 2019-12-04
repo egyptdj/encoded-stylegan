@@ -148,7 +148,6 @@ def minibatch_stddev_layer(x, group_size=4, num_new_features=1):
 
 def G_paper(
     latents_in,                         # First input: Latent vectors [minibatch, latent_size].
-    labels_in,                          # Second input: Labels [minibatch, label_size].
     num_channels        = 1,            # Number of output color channels. Overridden based on dataset.
     resolution          = 32,           # Output resolution. Overridden based on dataset.
     label_size          = 0,            # Dimensionality of the labels, 0 if no labels. Overridden based on dataset.
@@ -175,10 +174,7 @@ def G_paper(
     if structure is None: structure = 'linear' if is_template_graph else 'recursive'
     act = leaky_relu if use_leakyrelu else tf.nn.relu
 
-    latents_in.set_shape([None, latent_size])
-    labels_in.set_shape([None, label_size])
-    combo_in = tf.cast(tf.concat([latents_in, labels_in], axis=1), dtype)
-    lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
+    combo_in = tf.cast(latents_in, dtype)
     images_out = None
 
     # Building blocks.
@@ -208,42 +204,11 @@ def G_paper(
         with tf.variable_scope('ToRGB_lod%d' % lod):
             return apply_bias(conv2d(x, fmaps=num_channels, kernel=1, gain=1, use_wscale=use_wscale))
 
-    generator_features = []
-    # Linear structure: simple but inefficient.
-    if structure == 'linear':
-        x = block(combo_in, 2)
-        images_out = torgb(x, 2)
-        for res in range(3, resolution_log2 + 1):
-            lod = resolution_log2 - res
-            x = block(x, res)
-            img = torgb(x, res)
-            images_out = upscale2d(images_out)
-            with tf.variable_scope('Grow_lod%d' % lod):
-                images_out = lerp_clip(img, images_out, lod_in - lod)
-
-    # Recursive structure: complex but efficient.
-    if structure == 'recursive':
-        def grow(x, res, lod):
-            y = block(x, res)
-            img = lambda: upscale2d(torgb(y, res), 2**lod)
-            if res > 2: img = cset(img, (lod_in > lod), lambda: upscale2d(lerp(torgb(y, res), upscale2d(torgb(x, res - 1)), lod_in - lod), 2**lod))
-            if lod > 0: img = cset(img, (lod_in < lod), lambda: grow(y, res + 1, lod - 1))
-            return img()
-        images_out = grow(combo_in, 2, resolution_log2 - 2)
-
-    if structure == 'fixed':
-        x = block(combo_in, 2)
-        generator_features.append(x)
-        for res in range(3, resolution_log2 + 1):
-            x = block(x, res)
-            if not res==resolution_log2: generator_features.append(x)
-        images_out = torgb(x, res)
-
+    images_out = torgb(block(combo_in, resolution_log2), resolution_log2)
 
     assert images_out.dtype == tf.as_dtype(dtype)
     images_out = tf.identity(images_out, name='images_out')
-    generator_features.append(images_out)
-    return tuple(generator_features)
+    return images_out
 
 
 def D_paper(

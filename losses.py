@@ -12,7 +12,7 @@ def fp32(*values):
 def G_wgan(G, D, opt, latent_shape, labels): # pylint: disable=unused-argument
     latents = tf.random_normal(latent_shape)
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out[0], labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = -fake_scores_out
     return loss
 
@@ -24,12 +24,12 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
     latents = tf.random_normal(latent_shape)
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
     real_scores_out = fp32(D.get_output_for(reals, labels, is_training=True))
-    fake_scores_out = fp32(D.get_output_for(fake_images_out[0], labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = fake_scores_out - real_scores_out
 
     with tf.name_scope('GradientPenalty'):
-        mixing_factors = tf.random_uniform([latent_shape[0], 1, 1, 1], 0.0, 1.0, dtype=fake_images_out[0].dtype)
-        mixed_images_out = tflib.lerp(tf.cast(reals, fake_images_out[0].dtype), fake_images_out[0], mixing_factors)
+        mixing_factors = tf.random_uniform([latent_shape[0], 1, 1, 1], 0.0, 1.0, dtype=fake_images_out.dtype)
+        mixed_images_out = tflib.lerp(tf.cast(reals, fake_images_out.dtype), fake_images_out, mixing_factors)
         mixed_scores_out = fp32(D.get_output_for(mixed_images_out, labels, is_training=True))
         mixed_loss = opt.apply_loss_scaling(tf.reduce_sum(mixed_scores_out))
         mixed_grads = opt.undo_loss_scaling(fp32(tf.gradients(mixed_loss, [mixed_images_out])[0]))
@@ -43,15 +43,14 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
     return loss
 
 def G_lsgan(G, D, opt, latents, labels):
-    import ipdb; ipdb.set_trace()
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out[0], labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = 0.5 * tf.losses.mean_squared_error(labels=tf.ones_like(fake_scores_out), predictions=fake_scores_out)
     return loss
 
 def D_lsgan(G, D, opt, latents, reals, labels=None):
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
     real_scores_out = fp32(D.get_output_for(reals, labels, is_training=True))
-    fake_scores_out = fp32(D.get_output_for(fake_images_out[0], labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = 0.5 * tf.losses.mean_squared_error(labels=tf.ones_like(real_scores_out), predictions=real_scores_out) + 0.5 * tf.losses.mean_squared_error(labels=tf.zeros_like(fake_scores_out), predictions=fake_scores_out)
     return loss

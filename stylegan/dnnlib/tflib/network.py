@@ -155,7 +155,7 @@ class Network:
                 out_expr = self._build_func(*self.input_templates, **build_kwargs)
 
         # Collect outputs.
-        assert tfutil.is_tf_expression(out_expr) or isinstance(out_expr, tuple) or isinstance(out_expr, list)
+        assert tfutil.is_tf_expression(out_expr) or isinstance(out_expr, tuple)
         self.output_templates = [out_expr] if tfutil.is_tf_expression(out_expr) else list(out_expr)
         self.num_outputs = len(self.output_templates)
         assert self.num_outputs >= 1

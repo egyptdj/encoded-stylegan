@@ -74,19 +74,25 @@ def main():
             # DEFINE ENCODER AND GENERATOR
             # generator = Gs.clone(name='generator')
             # avg_generator = Gs.clone(name='avg_generator')
-            if args.progan:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=1024, structure='fixed')
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=1024, structure='fixed')
-            else:
-                encoder = tflib.Network("encoder", func_name='encoder.E_basic', out_shape=[18, 512], num_channels=3, resolution=1024, structure='fixed')
-                generator = tflib.Network("generator", func_name='stylegan.training.networks_stylegan.G_synthesis', num_channels=3, resolution=1024, structure='fixed')
+            encoders = []
+            generators = []
+            for lod in range(2, 11):
+                encoders.append(tflib.Network("encoder{}x{}".format(lod**2, lod**2), func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=lod**2))
+                generators.append(tflib.Network("generator{}x{}".format(lod**2, lod**2), func_name='stylegan.training.networks_progan.G_paper', num_channels=3, resolution=lod**2))
+            generators = generators[::-1]
 
             # CONSTRUCT NETWORK
-            images = gpu_image_input[gpu_idx]
-            encoder_features = list(encoder.get_output_for(images))
-            encoded_latents = encoder_features.pop()
-            generator_features = list(generator.get_output_for(encoded_latents, None, is_validation=True, use_noise=False, randomize_noise=False))
-            encoded_images = generator_features.pop()
+            x = gpu_image_input[gpu_idx]
+            encoder_features = []
+            generator_features = []
+            for encoder in encoders:
+                x = encoder.get_output_for(x)
+                encoder_features.append(x)
+            encoded_latents = x
+            for generator in generators:
+                x = generator.get_output_for(x)
+                generator_features.append(x)
+            encoded_images = x
             # if gpu_idx==0:
             #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
             # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
@@ -107,9 +113,8 @@ def main():
                 with tf.name_scope('features_loss'):
                     feature_loss = 0.0
 
-                    for e_feat, g_feat in zip(encoder_features, generator_features[::-1]):
+                    for e_feat, g_feat in zip(encoder_features[], generator_features):
                         feature_loss += MSE(e_feat, g_feat)
-
 
                 with tf.name_scope('regression_loss'):
                     regression_loss = tf.identity(feature_loss)
@@ -167,10 +172,7 @@ def main():
                     z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, reals=tf.random_normal(shape=tf.shape(encoded_latents), name='z_real'))
 
                 with tf.name_scope('y_domain_loss'):
-                    if args.progan:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure='fixed')
-                    else:
-                        image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure='fixed')
+                    image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure='fixed')
 
                     y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None)
                     y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None, reals=tf.identity(images, name='y_real'))

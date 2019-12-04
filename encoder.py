@@ -353,39 +353,7 @@ def E_basic(
                     x = tf.reshape(x, [-1]+out_shape)
             return x
 
-    encoder_features =[]
-    # Fixed structure: simple and efficient, but does not support progressive growing.
-    if structure == 'fixed':
-        x = fromrgb(images_in, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            x = block(x, res)
-            encoder_features.append(x)
-        features_out = block(x, 2)
-
-    # Linear structure: simple but inefficient.
-    if structure == 'linear':
-        img = images_in
-        x = fromrgb(img, resolution_log2)
-        for res in range(resolution_log2, 2, -1):
-            lod = resolution_log2 - res
-            x = block(x, res)
-            img = downscale2d(img)
-            y = fromrgb(img, res - 1)
-            with tf.variable_scope('Grow_lod%d' % lod):
-                x = tflib.lerp_clip(x, y, lod_in - lod)
-        features_out = block(x, 2)
-
-    # Recursive structure: complex but efficient.
-    if structure == 'recursive':
-        def cset(cur_lambda, new_cond, new_lambda):
-            return lambda: tf.cond(new_cond, new_lambda, cur_lambda)
-        def grow(res, lod):
-            x = lambda: fromrgb(downscale2d(images_in, 2**lod), res)
-            if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
-            x = block(x(), res); y = lambda: x
-            if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
-            return y()
-        features_out = grow(2, resolution_log2 - 2)
+    features_out = block(fromrgb(images_in, resolution_log2), resolution_log2)
 
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')
