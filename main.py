@@ -270,7 +270,6 @@ def main():
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_images)
         for _ in range(args.encoder_iter):
-            import ipdb; ipdb.set_trace()
             _ = sess.run(encoder_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
             for _ in range(args.latent_critic_iter):
                 _ = sess.run(z_critic_optimize, feed_dict={image_input: train_imbatch, encoder_learning_rate: encoder_lr})
