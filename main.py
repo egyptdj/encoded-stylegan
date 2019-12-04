@@ -213,10 +213,10 @@ def main():
                     print("\n".join([v.name for v in [*encoder_trainables.values()]]))
                     encoder_optimizer.register_gradients(encoder_loss, encoder_trainables)
 
-                    print("================== GENERATOR VARS ==================")
 
                     for generator in generators:
                         generator_trainables.update(generator.trainables)
+                    print("================== GENERATOR VARS ==================")
                     print("\n".join([v.name for v in [*generator_trainables.values()]]))
                     generator_optimizer.register_gradients(generator_loss, generator_trainables)
 
@@ -296,7 +296,7 @@ def main():
                 val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch})
                 val_summary_writer.add_summary(val_original_image_summary, iter)
 
-            save_pkl((encoder, generator, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
+            save_pkl((encoders, generators, latent_critic, image_critic), args.result_dir+'/model/model.pkl')
 
 
 
