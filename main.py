@@ -151,11 +151,9 @@ def main():
 
                 with tf.name_scope('z_domain_loss'):
                     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                    fake_latent = tf.random.normal(shape=tf.shape(encoded_latents), name='z_rand')
-                    real_latent = tf.identity(encoded_latents, name='z_real')
 
-                    z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=tf.identity(images, name='z_real'))
-                    z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=tf.random_normal(shape=tf.shape(encoded_latents)))
+                    z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images)
+                    z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, reals=tf.random_normal(shape=tf.shape(encoded_latents), name='z_real'))
 
                 with tf.name_scope('y_domain_loss'):
                     if args.progan:
