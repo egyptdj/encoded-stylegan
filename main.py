@@ -92,8 +92,10 @@ def main():
                 x = encoder.get_output_for(x)
                 encoder_features.append(x)
             encoded_latents = encoder_features.pop()
+            fake_x = tf.random_normal(tf.shape(encoded_latents))
             for generator in generators:
                 x = generator.get_output_for(x)
+                fake_x = generator.get_output_for(rand_x)
                 generator_features.append(x)
             encoded_images = generator_features.pop()
             generator_features = generator_features[::-1]
@@ -172,14 +174,14 @@ def main():
                 with tf.name_scope('z_domain_loss'):
                     latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
 
-                    z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, labels=None)
-                    z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, reals=tf.random_normal(shape=tf.shape(encoded_latents), name='z_real'))
+                    z_critic_fake_loss = G_lsgan(fake=encoded_latents, D=latent_critic, opt=z_critic_optimizer, latents=images, labels=None)
+                    z_critic_real_loss = D_lsgan(fake=encoded_latents, D=latent_critic, opt=z_critic_optimizer, latents=images, reals=tf.random_normal(shape=tf.shape(encoded_latents), name='z_real'))
 
                 with tf.name_scope('y_domain_loss'):
                     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure='fixed')
 
-                    y_critic_fake_loss = G_wgan(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None)
-                    y_critic_real_loss = D_wgan_gp(G=generator, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None, reals=tf.identity(images, name='y_real'))
+                    y_critic_fake_loss = G_wgan(fake=fake_x, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None)
+                    y_critic_real_loss = D_wgan_gp(fake=fake_x, D=image_critic, opt=y_critic_optimizer, latent_shape=tf.shape(encoded_latents), labels=None, reals=tf.identity(images, name='y_real'))
 
                 with tf.name_scope('final_losses'):
                     encoder_loss = regression_loss + z_critic_fake_loss
