@@ -204,8 +204,9 @@ def main():
 
                     for encoder in encoders:
                         encoder_trainables.update(encoder.trainables)
+
                     print("================== ENCODER VARS ==================")
-                    print("\n".join([v.name for v in [*encoder_trainables.values()]])
+                    print("\n".join([v.name for v in [*encoder_trainables.values()]]))
                     encoder_optimizer.register_gradients(encoder_loss, encoder_trainables)
 
                     print("================== GENERATOR VARS ==================")
