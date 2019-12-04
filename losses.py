@@ -2,6 +2,13 @@ import tensorflow as tf
 import stylegan.dnnlib.tflib as tflib
 
 
+def fp32(*values):
+    if len(values) == 1 and isinstance(values[0], tuple):
+        values = values[0]
+    values = tuple(tf.cast(v, tf.float32) for v in values)
+    return values if len(values) >= 2 else values[0]
+
+
 def G_wgan(G, D, opt, latent_shape): # pylint: disable=unused-argument
     latents = tf.random_normal(latent_shape)
     fake_images_out = G.get_output_for(latents, None, is_training=True)
