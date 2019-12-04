@@ -325,7 +325,7 @@ def E_basic(
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
     out_fmap = np.prod(out_shape)
 
-    images_in.set_shape([None, num_channels, resolution, resolution])
+    images_in.set_shape(images_in.shape)
     images_in = tf.cast(images_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     features_out = None
@@ -353,7 +353,11 @@ def E_basic(
                     x = tf.reshape(x, [-1]+out_shape)
             return x
 
-    features_out = block(fromrgb(images_in, resolution_log2), resolution_log2)
+    if resolution_log2 == 2:
+        x = fromrgb(images_in, resolution_log2)
+    else:
+        x = images_in
+    features_out = block(x, resolution_log2)
 
     assert features_out.dtype == tf.as_dtype(dtype)
     features_out = tf.identity(features_out, name='features_out')

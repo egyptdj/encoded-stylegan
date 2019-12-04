@@ -175,6 +175,7 @@ def G_paper(
     act = leaky_relu if use_leakyrelu else tf.nn.relu
 
     combo_in = tf.cast(latents_in, dtype)
+    combo_in.set_shape(combo_in.shape)
     images_out = None
 
     # Building blocks.
@@ -204,7 +205,9 @@ def G_paper(
         with tf.variable_scope('ToRGB_lod%d' % lod):
             return apply_bias(conv2d(x, fmaps=num_channels, kernel=1, gain=1, use_wscale=use_wscale))
 
-    images_out = torgb(block(combo_in, resolution_log2), resolution_log2)
+    images_out = block(combo_in, resolution_log2)
+    if resolution_log2 == 10:
+        images_out = torgb(images_out, resolution_log2)
 
     assert images_out.dtype == tf.as_dtype(dtype)
     images_out = tf.identity(images_out, name='images_out')
