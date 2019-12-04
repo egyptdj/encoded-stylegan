@@ -81,7 +81,6 @@ def main():
             for lod in range(10, 1, -1):
                 encoders.append(tflib.Network("encoder{}x{}".format(2**lod, 2**lod), func_name='encoder.E_basic', out_shape=[512], num_channels=3, resolution=2**lod))
             for lod in range(2, 11, 1):
-                import ipdb; ipdb.set_trace()
                 generators.append(tflib.Network("generator{}x{}".format(2**lod, 2**lod), func_name='stylegan.training.networks_progan.G_paper', latent_size=512, num_channels=3, resolution=2**lod))
 
             # CONSTRUCT NETWORK
@@ -96,6 +95,7 @@ def main():
                 x = generator.get_output_for(x)
                 generator_features.append(x)
             encoded_images = x
+            generator_features = generator_features[::-1]
             # if gpu_idx==0:
             #     latent_manipulator = tf.placeholder_with_default(tf.zeros_like(encoded_latents), encoded_latents.shape, name='latent_manipulator')
             # encoded_images = generator.get_output_for(encoded_latents+latent_manipulator, None, is_validation=True, use_noise=False, randomize_noise=False)
