@@ -113,8 +113,11 @@ def main():
                 with tf.name_scope('ILI'):
                     with tf.name_scope('gan_losses'):
                         latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=512, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                        z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, latents=images, labels=None)
-                        z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, latents=images, reals=tf.identity(latents, name='z_real'))
+                        latent_critic_fake_output = latent_critic.get_output_for(encoded_latents, None, is_training=True)
+                        latent_critic_real_output = latent_critic.get_output_for(latents, None, is_training=True)
+                        z_critic_fake_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(latent_critic_fake_output)-latent_critic_fake_output))
+                        z_critic_real_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(latent_critic_real_output)-latent_critic_real_output)) + 0.5 * tf.reduce_mean(tf.square(tf.zeros_like(latent_critic_fake_output)-latent_critic_fake_output))
+
                     with tf.name_scope('consistency_losses'):
                         ili_consistency_loss = 0.0
                         # L2 loss
@@ -159,8 +162,10 @@ def main():
                         #     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
                         image_critic = _D.clone(name='y_critic')
 
-                        y_critic_fake_loss = G_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label)
-                        y_critic_real_loss = D_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label, reals=tf.identity(images, name='y_real'))
+                        image_critic_fake_output = image_critic.get_output_for(generated_images, None, is_training=True)
+                        image_critic_real_output = image_critic.get_output_for(images, None, is_training=True)
+                        z_critic_fake_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(image_critic_fake_output)-image_critic_fake_output))
+                        z_critic_real_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(image_critic_real_output)-image_critic_real_output)) + 0.5 * tf.reduce_mean(tf.square(tf.zeros_like(image_critic_fake_output)-image_critic_fake_output))
 
                     with tf.name_scope('consistency_losses'):
                         lil_consistency_loss = 0.0
