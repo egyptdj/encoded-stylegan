@@ -16,6 +16,7 @@ from stylegan import dnnlib
 from stylegan.dnnlib import tflib
 from stylegan.training import dataset
 from stylegan.training.misc import save_pkl
+from stylegan.training.misc import adjust_dynamic_range
 from stylegan.training.networks_stylegan import *
 
 def main():
@@ -56,7 +57,8 @@ def main():
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
         image_input = tf.placeholder(tf.float32, [None,3,1024,1024], name='image_input')
-        gpu_image_input = tf.split(image_input, args.num_gpus, axis=0)
+        image_input_expanded = adjust_dynamic_range(image_input, [0.0, 1.0], [-1.0, 1.0])
+        gpu_image_input = tf.split(image_input_expanded, args.num_gpus, axis=0)
         latent_input = tf.placeholder(tf.float32, [None,512], name='latent_input')
         gpu_latent_input = tf.split(latent_input, args.num_gpus, axis=0)
         learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
@@ -110,9 +112,9 @@ def main():
 
                 with tf.name_scope('ILI'):
                     with tf.name_scope('gan_losses'):
-                        latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=1, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                        z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, labels=None)
-                        z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, opt=z_critic_optimizer, latents=images, reals=tf.random_normal(shape=tf.shape(encoded_latents), name='z_real'))
+                        latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=512, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
+                        z_critic_fake_loss = G_lsgan(G=encoder, D=latent_critic, latents=images, labels=None)
+                        z_critic_real_loss = D_lsgan(G=encoder, D=latent_critic, latents=images, reals=tf.identity(latents, name='z_real'))
                     with tf.name_scope('consistency_losses'):
                         ili_consistency_loss = 0.0
                         # L2 loss
@@ -121,13 +123,15 @@ def main():
 
                         # VGG loss
                         image_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
-                        image_vgg.build(tf.image.resize(tf.transpose(images, perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
+                        image_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
                         image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
                         encoded_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
-                        encoded_vgg.build(tf.image.resize(tf.transpose(encoded_images, perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
+                        encoded_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(encoded_images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
                         encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
                         vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
                         ili_consistency_loss += vgg_loss
+
+                        ili_consistency_loss *= 1e-3
 
                         # # LPIPS loss
                         # lpips_url = 'https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2'
@@ -154,14 +158,16 @@ def main():
                         else:
                             image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
 
-                        y_critic_fake_loss = G_lsgan(G=generator, D=image_critic, opt=y_critic_optimizer, latents=latents, labels=empty_label)
-                        y_critic_real_loss = D_lsgan(G=generator, D=image_critic, opt=y_critic_optimizer, latents=latents, labels=empty_label, reals=tf.identity(images, name='y_real'))
+                        y_critic_fake_loss = G_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label)
+                        y_critic_real_loss = D_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label, reals=tf.identity(images, name='y_real'))
 
                     with tf.name_scope('consistency_losses'):
                         lil_consistency_loss = 0.0
                         # L1 loss
                         l1_loss = MAE(latents, generated_latents)
                         lil_consistency_loss += l1_loss
+                        
+                        lil_consistency_loss *= 10.0
 
                 with tf.name_scope('final_losses'):
                     tf.add_to_collection("LOSS_Z_CRITIC_REAL", z_critic_real_loss)
@@ -172,8 +178,8 @@ def main():
                     tf.add_to_collection("LOSS_LIL_CONSISTENCY", lil_consistency_loss)
 
                 with tf.name_scope('metrics'):
-                    psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
-                    ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(images, perm=[0,2,3,1]), tf.transpose(encoded_images, perm=[0,2,3,1]), 1.0))
+                    psnr = tf.reduce_mean(tf.image.psnr(tf.transpose(adjust_dynamic_range(images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), tf.transpose(adjust_dynamic_range(encoded_images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), 1.0))
+                    ssim = tf.reduce_mean(tf.image.ssim(tf.transpose(adjust_dynamic_range(images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), tf.transpose(adjust_dynamic_range(encoded_images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), 1.0))
                     tf.add_to_collection('METRIC_PSNR', psnr)
                     tf.add_to_collection('METRIC_SSIM', ssim)
 
@@ -185,7 +191,7 @@ def main():
         _ = tf.summary.histogram('latents', latent_input, family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.histogram('encoded_latents', tf.concat(tf.get_collection('LATENT_ENCODED'), axis=0), family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.histogram('generated_latents', tf.concat(tf.get_collection('LATENT_GENERATED'), axis=0), family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
-        _ = tf.summary.histogram('images', image_input, family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('images', image_input_expanded, family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.histogram('encoded_images', tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.histogram('generated_images', tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -198,7 +204,8 @@ def main():
         _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='01_metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('learning_rate', learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        generated_image_summary = tf.summary.image('generated', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
@@ -228,9 +235,9 @@ def main():
         val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%args.save_iter==0:
-            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, empty_label: train_labelbatch})
+            train_image_summary = sess.run(image_summary, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, empty_label: train_labelbatch})
             train_summary_writer.add_summary(train_image_summary, iter)
-            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
+            val_image_summary = sess.run(recovered_image_summary, feed_dict={image_input: val_imbatch, latent_input: val_latentbatch, empty_label: val_labelbatch})
             val_summary_writer.add_summary(val_image_summary, iter)
             if iter==0:
                 val_original_image_summary = sess.run(original_image_summary, feed_dict={image_input: val_imbatch, empty_label: val_labelbatch})
