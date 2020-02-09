@@ -2,6 +2,7 @@ import os
 import sys
 import utils
 import pickle
+import random
 import numpy as np
 import tensorflow as tf
 import PIL.Image
@@ -19,6 +20,8 @@ from stylegan.training.networks_stylegan import *
 
 def main():
     args = utils.option.parse()
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     tf.random.set_random_seed(args.seed)
     tf.config.set_soft_device_placement(True)
 
@@ -43,11 +46,12 @@ def main():
     empty_label = tf.placeholder(tf.float32, shape=[None,0], name='empty_label')
     train_labelbatch = np.zeros([args.minibatch_size,0], np.float32)
 
-    # PREPARE VALIDATION IMAGE BATCH
+    # PREPARE VALIDATION BATCH
     image_list = [image for image in os.listdir(args.validation_dir) if image.endswith("png") or image.endswith("jpg") or image.endswith("jpeg")]
     assert len(image_list)>0
-    val_imbatch = np.transpose(np.stack([np.array(PIL.Image.open(args.validation_dir+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
+    val_imbatch = np.transpose(np.stack([np.float32(PIL.Image.open(args.validation_dir+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
     val_labelbatch = np.zeros([len(image_list)//args.num_gpus,0], np.float32)
+    val_labelbatch = np.random.normal(size=[val_labelbatch.shape[0], 512])
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
@@ -58,7 +62,7 @@ def main():
         learning_rate = tf.placeholder(tf.float32, [], name='learning_rate')
         # Gs_beta = 0.5 ** tf.div(tf.cast(args.minibatch_size*args.num_gpus, tf.float32), 10000.0)
         tf.add_to_collection('KEY_NODES', image_input)
-        tf.add_to_collection('KEY_NODES', noise_input)
+        tf.add_to_collection('KEY_NODES', latent_input)
         tf.add_to_collection('KEY_NODES', empty_label)
         tf.add_to_collection('KEY_NODES', encoder_learning_rate)
 
@@ -97,7 +101,10 @@ def main():
             tf.add_to_collection('KEY_NODES', latent_manipulator)
             tf.add_to_collection('KEY_NODES', encoded_latents)
             tf.add_to_collection('KEY_NODES', encoded_images)
+            tf.add_to_collection('LATENT_ENCODED', encoded_latents)
             tf.add_to_collection('IMAGE_ENCODED', encoded_images)
+            tf.add_to_collection('IMAGE_GENERATED', generated_images)
+            tf.add_to_collection('LATENT_GENERATED', generated_latents)
 
             with tf.name_scope('losses'):
                 MSE = tf.keras.losses.MeanSquaredError()
@@ -158,7 +165,6 @@ def main():
                         l1_loss = MAE(latents, generated_latents)
                         lil_consistency_loss += l1_loss
 
-
                 with tf.name_scope('final_losses'):
                     tf.add_to_collection("LOSS_Z_CRITIC_REAL", z_critic_real_loss)
                     tf.add_to_collection("LOSS_Y_CRITIC_REAL", y_critic_real_loss)
@@ -180,6 +186,12 @@ def main():
                     y_critic_optimizer.register_gradients(y_critic_real_loss, image_critic.trainables)
 
     with tf.name_scope('summary'):
+        _ = tf.summary.histogram('latents', latent_input, family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('encoded_latents', tf.concat(tf.get_collection('LATENT_ENCODED'), axis=0), family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('generated_latents', tf.concat(tf.get_collection('LATENT_GENERATED'), axis=0), family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('images', image_input, family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('encoded_images', tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
+        _ = tf.summary.histogram('generated_images', tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), family='images', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('latent_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_REAL')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('image_critic_real', tf.reduce_mean(tf.get_collection('LOSS_Y_CRITIC_REAL')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('latent_critic_fake', tf.reduce_mean(tf.get_collection('LOSS_Z_CRITIC_FAKE')), family='02_loss', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -210,12 +222,13 @@ def main():
     lr = args.learning_rate
     for iter in tqdm(range(args.num_iter)):
         train_imbatch = sess.run(get_images)
-        _ = sess.run(critic_optimize, feed_dict={image_input: train_imbatch, learning_rate: lr, empty_label: train_labelbatch})
-        _ = sess.run(fake_optimize, feed_dict={image_input: train_imbatch, learning_rate: lr, empty_label: train_labelbatch})
+        train_latentbatch = np.random.normal(size=[args.num_gpus*args.minibatch_size, 512])
+        _ = sess.run(critic_optimize, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
+        _ = sess.run(fake_optimize, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
 
-        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, learning_rate: lr, empty_label: train_labelbatch})
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_scalar_summary, iter)
-        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, learning_rate: lr, empty_label: val_labelbatch})
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, latent_input: val_labelbatch, learning_rate: lr, empty_label: val_labelbatch})
         val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%args.save_iter==0:
