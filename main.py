@@ -32,7 +32,7 @@ def main():
     if not args.stylegan:
         print('AUTOENCODING ON THE PROGRESSIVE GAN')
         url = os.path.join(args.cache_dir, 'karras2018iclr-celebahq-1024x1024.pkl')
-        with open(url, 'rb') as f: _, _, Gs = pickle.load(f)
+        with open(url, 'rb') as f: _G, _D, Gs = pickle.load(f)
     else:
         print('AUTOENCODING ON THE STYLE GAN')
         url = 'https://drive.google.com/uc?id=1MEGjdvVpUsu1jB4zrXZN7Y4kBBOzizDQ' # karras2019stylegan-ffhq-1024x1024.pkl
@@ -131,7 +131,7 @@ def main():
                         vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
                         ili_consistency_loss += vgg_loss
 
-                        ili_consistency_loss *= 1e-3
+                        ili_consistency_loss *= 1.0
 
                         # # LPIPS loss
                         # lpips_url = 'https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2'
@@ -153,10 +153,11 @@ def main():
 
                 with tf.name_scope('LIL'):
                     with tf.name_scope('gan_losses'):
-                        if not args.stylegan:
-                            image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=args.structure)
-                        else:
-                            image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                        # if not args.stylegan:
+                        #     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_progan.D_paper', num_channels=3, resolution=1024, structure=args.structure)
+                        # else:
+                        #     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
+                        image_critic = _D.clone(name='y_critic')
 
                         y_critic_fake_loss = G_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label)
                         y_critic_real_loss = D_lsgan(G=generator, D=image_critic, latents=latents, labels=empty_label, reals=tf.identity(images, name='y_real'))
@@ -166,7 +167,7 @@ def main():
                         # L1 loss
                         l1_loss = MAE(latents, generated_latents)
                         lil_consistency_loss += l1_loss
-                        
+
                         lil_consistency_loss *= 10.0
 
                 with tf.name_scope('final_losses'):
@@ -204,8 +205,8 @@ def main():
         _ = tf.summary.scalar('ssim', tf.reduce_mean(tf.get_collection('METRIC_SSIM')), family='01_metric', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
         _ = tf.summary.scalar('learning_rate', learning_rate, family='03_lr', collections=['SCALAR_SUMMARY', tf.GraphKeys.SUMMARIES])
         original_image_summary = tf.summary.image('original', tf.image.resize(tf.clip_by_value(tf.transpose(image_input, perm=[0,2,3,1]), 0.0, 1.0), [256,256]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        generated_image_summary = tf.summary.image('generated', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
-        recovered_image_summary = tf.summary.image('recovered', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), 0.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        generated_image_summary = tf.summary.image('generated', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_GENERATED'), axis=0), perm=[0,2,3,1]), -1.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
+        recovered_image_summary = tf.summary.image('recovered', adjust_dynamic_range(tf.image.resize(tf.clip_by_value(tf.transpose(tf.concat(tf.get_collection('IMAGE_ENCODED'), axis=0), perm=[0,2,3,1]), -1.0, 1.0), [256,256]), [-1.0, 1.0], [0.0, 1.0]), max_outputs=args.image_output, family='images', collections=['IMAGE_SUMMARY', tf.GraphKeys.SUMMARIES])
         scalar_summary = tf.summary.merge(tf.get_collection('SCALAR_SUMMARY'))
         image_summary = tf.summary.merge(tf.get_collection('IMAGE_SUMMARY'))
         val_summary = tf.summary.merge(tf.get_collection('VAL_SUMMARY'))
