@@ -44,13 +44,13 @@ def D_wgan_gp(G, D, opt, latent_shape, reals, labels=None, # pylint: disable=unu
 
 def G_lsgan(G, D, latents, labels):
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
-    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, is_training=True))
     loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(fake_scores_out)-fake_scores_out))
     return loss
 
 def D_lsgan(G, D, latents, reals, labels=None):
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
-    real_scores_out = fp32(D.get_output_for(reals, labels, is_training=True))
-    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
+    real_scores_out = fp32(D.get_output_for(reals, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, is_training=True))
     loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(real_scores_out)-real_scores_out)) + 0.5 * tf.reduce_mean(tf.square(tf.zeros_like(fake_scores_out)-fake_scores_out))
     return loss

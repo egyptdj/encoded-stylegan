@@ -113,10 +113,11 @@ def main():
                 with tf.name_scope('ILI'):
                     with tf.name_scope('gan_losses'):
                         latent_critic = tflib.Network("z_critic", func_name='stylegan.training.networks_stylegan.G_mapping', dlatent_size=512, mapping_layers=args.latent_critic_layers, latent_size=512, normalize_latents=False)
-                        latent_critic_fake_output = latent_critic.get_output_for(encoded_latents, None, is_training=True)
-                        latent_critic_real_output = latent_critic.get_output_for(latents, None, is_training=True)
-                        z_critic_fake_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(latent_critic_fake_output)-latent_critic_fake_output))
-                        z_critic_real_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(latent_critic_real_output)-latent_critic_real_output)) + 0.5 * tf.reduce_mean(tf.square(tf.zeros_like(latent_critic_fake_output)-latent_critic_fake_output))
+                        latent_critic_fake_output = latent_critic.get_output_for(encoded_latents, empty_label, is_training=True)
+                        latent_critic_real_output = latent_critic.get_output_for(latents, empty_label, is_training=True)
+
+                        z_critic_fake_loss = 0.5 * MSE(tf.ones_like(latent_critic_fake_output), latent_critic_fake_output)
+                        z_critic_real_loss = 0.5 * MSE(tf.ones_like(latent_critic_real_output), latent_critic_real_output) + 0.5 * MSE(tf.zeros_like(latent_critic_fake_output), latent_critic_fake_output)
 
                     with tf.name_scope('consistency_losses'):
                         ili_consistency_loss = 0.0
@@ -134,7 +135,7 @@ def main():
                         vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
                         ili_consistency_loss += vgg_loss
 
-                        ili_consistency_loss *= 1.0
+                        ili_consistency_loss *= 1e-3
 
                         # # LPIPS loss
                         # lpips_url = 'https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2'
@@ -162,10 +163,10 @@ def main():
                         #     image_critic = tflib.Network("y_critic", func_name='stylegan.training.networks_stylegan.D_basic', num_channels=3, resolution=1024, structure=args.structure)
                         image_critic = _D.clone(name='y_critic')
 
-                        image_critic_fake_output = image_critic.get_output_for(generated_images, None, is_training=True)
-                        image_critic_real_output = image_critic.get_output_for(images, None, is_training=True)
-                        z_critic_fake_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(image_critic_fake_output)-image_critic_fake_output))
-                        z_critic_real_loss = 0.5 * tf.reduce_mean(tf.square(tf.ones_like(image_critic_real_output)-image_critic_real_output)) + 0.5 * tf.reduce_mean(tf.square(tf.zeros_like(image_critic_fake_output)-image_critic_fake_output))
+                        image_critic_fake_output = image_critic.get_output_for(generated_images, is_training=True)[0]
+                        image_critic_real_output = image_critic.get_output_for(images, is_training=True)[0]
+                        y_critic_fake_loss = 0.5 * MSE(tf.ones_like(image_critic_fake_output), image_critic_fake_output)
+                        y_critic_real_loss = 0.5 * MSE(tf.ones_like(image_critic_real_output), image_critic_real_output) + 0.5 * MSE(tf.zeros_like(image_critic_fake_output), image_critic_fake_output)
 
                     with tf.name_scope('consistency_losses'):
                         lil_consistency_loss = 0.0
@@ -190,7 +191,7 @@ def main():
                     tf.add_to_collection('METRIC_SSIM', ssim)
 
                 with tf.name_scope('backprop'):
-                    encoder_generator_optimizer.register_gradients(z_critic_fake_loss+ili_consistency_loss+y_critic_fake_loss+lil_consistency_loss, [*encoder.trainables.values()])
+                    encoder_generator_optimizer.register_gradients(z_critic_fake_loss+ili_consistency_loss+y_critic_fake_loss+lil_consistency_loss, [*encoder.trainables.values()]+[*generator.trainables.values()])
                     critic_optimizer.register_gradients(z_critic_real_loss+y_critic_real_loss, [*latent_critic.trainables.values()]+[*image_critic.trainables.values()])
 
     with tf.name_scope('summary'):
