@@ -68,10 +68,8 @@ def main():
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimizers'):
-        encoder_optimizer = tflib.Optimizer(name='encoder_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        generator_optimizer = tflib.Optimizer(name='generator_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        z_critic_optimizer = tflib.Optimizer(name='z_critic_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
-        y_critic_optimizer = tflib.Optimizer(name='y_critic_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        encoder_generator_optimizer = tflib.Optimizer(name='encoder_generator_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
+        critic_optimizer = tflib.Optimizer(name='critic_optimizer', learning_rate=learning_rate, beta1=0.0, beta2=0.99, epsilon=1e-8)
 
     # CONSTRUCT MODELS
     for gpu_idx in gpus:
@@ -180,10 +178,8 @@ def main():
                     tf.add_to_collection('METRIC_SSIM', ssim)
 
                 with tf.name_scope('backprop'):
-                    encoder_optimizer.register_gradients(z_critic_fake_loss+ili_consistency_loss, encoder.trainables)
-                    generator_optimizer.register_gradients(y_critic_fake_loss+lil_consistency_loss, generator.trainables)
-                    z_critic_optimizer.register_gradients(z_critic_real_loss, latent_critic.trainables)
-                    y_critic_optimizer.register_gradients(y_critic_real_loss, image_critic.trainables)
+                    encoder_generator_optimizer.register_gradients(z_critic_fake_loss+ili_consistency_loss+y_critic_fake_loss+lil_consistency_loss, [*encoder.trainables.values()])
+                    critic_optimizer.register_gradients(z_critic_real_loss+y_critic_real_loss, [*latent_critic.trainables.values()]+[*image_critic.trainables.values()])
 
     with tf.name_scope('summary'):
         _ = tf.summary.histogram('latents', latent_input, family='latents', collections=['SCALAR_SUMMARY', 'VAL_SUMMARY', tf.GraphKeys.SUMMARIES])
@@ -210,8 +206,8 @@ def main():
 
     # DEFINE OPTIMIZE OPS
     with tf.name_scope('optimize'):
-        fake_optimize = [encoder_optimizer.apply_updates(), generator_optimizer.apply_updates()]
-        critic_optimize = [z_critic_optimizer.apply_updates(), y_critic_optimizer.apply_updates()]
+        encoder_generator_optimize = encoder_generator_optimizer.apply_updates()
+        critic_optimize = critic_optimizer.apply_updates()
 
     os.makedirs(args.result_dir+'/model', exist_ok=True)
     os.makedirs(args.result_dir+'/summary', exist_ok=True)
@@ -224,7 +220,7 @@ def main():
         train_imbatch = sess.run(get_images)
         train_latentbatch = np.random.normal(size=[args.num_gpus*args.minibatch_size, 512])
         _ = sess.run(critic_optimize, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
-        _ = sess.run(fake_optimize, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
+        _ = sess.run(encoder_generator_optimize, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
 
         train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_scalar_summary, iter)
