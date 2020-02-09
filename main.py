@@ -51,7 +51,7 @@ def main():
     assert len(image_list)>0
     val_imbatch = np.transpose(np.stack([np.float32(PIL.Image.open(args.validation_dir+"/"+image_path).resize((1024,1024))) for image_path in image_list], axis=0), [0,3,1,2])/255.0
     val_labelbatch = np.zeros([len(image_list)//args.num_gpus,0], np.float32)
-    val_labelbatch = np.random.normal(size=[val_labelbatch.shape[0], 512])
+    val_latentbatch = np.random.normal(size=[val_imbatch.shape[0], 512])
 
     # DEFINE INPUTS
     with tf.device('/cpu:0'):
@@ -64,7 +64,7 @@ def main():
         tf.add_to_collection('KEY_NODES', image_input)
         tf.add_to_collection('KEY_NODES', latent_input)
         tf.add_to_collection('KEY_NODES', empty_label)
-        tf.add_to_collection('KEY_NODES', encoder_learning_rate)
+        tf.add_to_collection('KEY_NODES', learning_rate)
 
     # DEFINE OPTIMIZERS
     with tf.name_scope('optimizers'):
@@ -220,15 +220,15 @@ def main():
     sess = tf.get_default_session()
     tflib.tfutil.init_uninitialized_vars()
     lr = args.learning_rate
-    for iter in tqdm(range(args.num_iter)):
+    for iter in tqdm(range(args.num_iter), ncols=50):
         train_imbatch = sess.run(get_images)
         train_latentbatch = np.random.normal(size=[args.num_gpus*args.minibatch_size, 512])
-        _ = sess.run(critic_optimize, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
-        _ = sess.run(fake_optimize, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
+        _ = sess.run(critic_optimize, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
+        _ = sess.run(fake_optimize, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
 
-        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, latent_input: train_labelbatch, learning_rate: lr, empty_label: train_labelbatch})
+        train_scalar_summary = sess.run(scalar_summary, feed_dict={image_input: train_imbatch, latent_input: train_latentbatch, learning_rate: lr, empty_label: train_labelbatch})
         train_summary_writer.add_summary(train_scalar_summary, iter)
-        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, latent_input: val_labelbatch, learning_rate: lr, empty_label: val_labelbatch})
+        val_scalar_summary = sess.run(val_summary, feed_dict={image_input: val_imbatch, latent_input: val_latentbatch, learning_rate: lr, empty_label: val_labelbatch})
         val_summary_writer.add_summary(val_scalar_summary, iter)
 
         if iter%args.save_iter==0:
