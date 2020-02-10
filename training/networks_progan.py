@@ -320,3 +320,97 @@ def D_paper(
     return scores_out
 
 #----------------------------------------------------------------------------
+# Encoder
+
+def E_paper(
+    images_in,                          # First input: Images [minibatch, channel, height, width].
+    out_shape        = [512],        # Output shape
+    num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
+    resolution          = 32,           # Input resolution. Overridden based on dataset.
+    fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
+    fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
+    fmap_max            = 512,          # Maximum number of feature maps in any layer.
+    nonlinearity        = 'lrelu',      # Activation function: 'relu', 'lrelu',
+    use_wscale          = True,         # Enable equalized learning rate?
+    mbstd_group_size    = 4,            # Group size for the minibatch standard deviation layer, 0 = disable.
+    mbstd_num_features  = 1,            # Number of features for the minibatch standard deviation layer.
+    dtype               = 'float32',    # Data type to use for activations and outputs.
+    fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
+    blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
+    structure           = 'auto',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
+    is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
+    **_kwargs):                         # Ignore unrecognized keyword args.
+
+    resolution_log2 = int(np.log2(resolution))
+    assert resolution == 2**resolution_log2 and resolution >= 4
+    def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
+    def blur(x): return blur2d(x, blur_filter) if blur_filter else x
+    if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
+    act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
+    out_fmap = np.prod(out_shape)
+
+    images_in.set_shape([None, num_channels, resolution, resolution])
+    images_in = tf.cast(images_in, dtype)
+    lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
+    features_out = None
+
+    # Building blocks.
+    def fromrgb(x, res): # res = 2..resolution_log2
+        with tf.variable_scope('FromRGB_lod%d' % (resolution_log2 - res)):
+            return act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=1, gain=gain, use_wscale=use_wscale)))
+    def block(x, res): # res = 2..resolution_log2
+        with tf.variable_scope('%dx%d' % (2**res, 2**res)):
+            if res >= 3: # 8x8 and up
+                with tf.variable_scope('Conv0'):
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                with tf.variable_scope('Conv1_down'):
+                    x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
+            else: # 4x4
+                if mbstd_group_size > 1:
+                    x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
+                with tf.variable_scope('Conv'):
+                    x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
+                with tf.variable_scope('Dense0'):
+                    x = act(apply_bias(dense(x, fmaps=nf(res-2), gain=gain, use_wscale=use_wscale)))
+                with tf.variable_scope('Dense1'):
+                    x = apply_bias(dense(x, fmaps=out_fmap, gain=1, use_wscale=use_wscale))
+                    x = tf.reshape(x, [-1]+out_shape)
+            return x
+
+    # Fixed structure: simple and efficient, but does not support progressive growing.
+    if structure == 'fixed':
+        x = fromrgb(images_in, resolution_log2)
+        for res in range(resolution_log2, 2, -1):
+            x = block(x, res)
+        features_out = block(x, 2)
+
+    # Linear structure: simple but inefficient.
+    if structure == 'linear':
+        img = images_in
+        x = fromrgb(img, resolution_log2)
+        for res in range(resolution_log2, 2, -1):
+            lod = resolution_log2 - res
+            x = block(x, res)
+            img = downscale2d(img)
+            y = fromrgb(img, res - 1)
+            with tf.variable_scope('Grow_lod%d' % lod):
+                x = tflib.lerp_clip(x, y, lod_in - lod)
+        features_out = block(x, 2)
+
+    # Recursive structure: complex but efficient.
+    if structure == 'recursive':
+        def cset(cur_lambda, new_cond, new_lambda):
+            return lambda: tf.cond(new_cond, new_lambda, cur_lambda)
+        def grow(res, lod):
+            x = lambda: fromrgb(downscale2d(images_in, 2**lod), res)
+            if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
+            x = block(x(), res); y = lambda: x
+            if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
+            return y()
+        features_out = grow(2, resolution_log2 - 2)
+
+    assert features_out.dtype == tf.as_dtype(dtype)
+    features_out = tf.identity(features_out, name='features_out')
+    return features_out
+
+#----------------------------------------------------------------------------
