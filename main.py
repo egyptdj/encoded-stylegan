@@ -121,21 +121,25 @@ def main():
 
                     with tf.name_scope('consistency_losses'):
                         ili_consistency_loss = 0.0
-                        # L2 loss
-                        l2_loss = MSE(images, encoded_images)
-                        ili_consistency_loss += l2_loss
+                        # # L2 loss
+                        # l2_loss = MSE(images, encoded_images)
+                        # ili_consistency_loss += l2_loss
+                        #
+                        # # VGG loss
+                        # image_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
+                        # image_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
+                        # image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
+                        # encoded_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
+                        # encoded_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(encoded_images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
+                        # encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
+                        # vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
+                        # ili_consistency_loss += vgg_loss
 
-                        # VGG loss
-                        image_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
-                        image_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
-                        image_perception = [image_vgg.conv1_1, image_vgg.conv1_2, image_vgg.conv3_2, image_vgg.conv4_2]
-                        encoded_vgg = Vgg16(args.cache_dir+'/vgg16.npy')
-                        encoded_vgg.build(tf.image.resize(tf.transpose(adjust_dynamic_range(encoded_images, [-1.0, 1.0], [0.0, 1.0]), perm=[0,2,3,1]), [args.vgg_shape,args.vgg_shape]))
-                        encoded_perception = [encoded_vgg.conv1_1, encoded_vgg.conv1_2, encoded_vgg.conv3_2, encoded_vgg.conv4_2]
-                        vgg_loss = tf.reduce_sum([MSE(image, encoded) for image, encoded in zip(image_perception, encoded_perception)]) # https://github.com/machrisaa/tensorflow-vgg
-                        ili_consistency_loss += vgg_loss
+                        # L1 loss
+                        l1_loss = MAE(images, encoded_images)
+                        ili_consistency_loss += l1_loss
 
-                        ili_consistency_loss *= 1e-3
+                        ili_consistency_loss *= 10.0
 
                         # # LPIPS loss
                         # lpips_url = 'https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2'
