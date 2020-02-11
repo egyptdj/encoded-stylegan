@@ -112,7 +112,9 @@ def training_schedule(
 def training_loop(
     submit_config,
     G_args                  = {},       # Options for generator network.
-    D_args                  = {},       # Options for discriminator network.
+    E_args                  = {},       # Options for generator network.
+    Dx_args                  = {},       # Options for discriminator network.
+    Dz_args                  = {},       # Options for discriminator network.
     G_opt_args              = {},       # Options for generator optimizer.
     D_opt_args              = {},       # Options for discriminator optimizer.
     G_loss_args             = {},       # Options for generator loss.
@@ -150,11 +152,13 @@ def training_loop(
         if resume_run_id is not None:
             network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
             print('Loading networks from "%s"...' % network_pkl)
-            G, D, Gs = misc.load_pkl(network_pkl)
+            G, E, Dx, Dz, Gs = misc.load_pkl(network_pkl)
         else:
             print('Constructing networks...')
             G = tflib.Network('G', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **G_args)
-            D = tflib.Network('D', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **D_args)
+            E = tflib.Network('E', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **E_args)
+            Dx = tflib.Network('Dx', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **Dx_args)
+            Dz = tflib.Network('Dz', label_size=training_set.label_size, **Dz_args)
             Gs = G.clone('Gs')
     G.print_layers(); D.print_layers()
 
@@ -171,16 +175,18 @@ def training_loop(
     for gpu in range(submit_config.num_gpus):
         with tf.name_scope('GPU%d' % gpu), tf.device('/gpu:%d' % gpu):
             G_gpu = G if gpu == 0 else G.clone(G.name + '_shadow')
-            D_gpu = D if gpu == 0 else D.clone(D.name + '_shadow')
-            lod_assign_ops = [tf.assign(G_gpu.find_var('lod'), lod_in), tf.assign(D_gpu.find_var('lod'), lod_in)]
+            E_gpu = E if gpu == 0 else E.clone(E.name + '_shadow')
+            Dx_gpu = Dx if gpu == 0 else Dx.clone(Dx.name + '_shadow')
+            Dz_gpu = Dz if gpu == 0 else Dz.clone(Dz.name + '_shadow')
+            lod_assign_ops = [tf.assign(G_gpu.find_var('lod'), lod_in), tf.assign(E_gpu.find_var('lod'), lod_in), tf.assign(Dx_gpu.find_var('lod'), lod_in)]
             reals, labels = training_set.get_minibatch_tf()
             reals = process_reals(reals, lod_in, mirror_augment, training_set.dynamic_range, drange_net)
             with tf.name_scope('G_loss'), tf.control_dependencies(lod_assign_ops):
-                G_loss = dnnlib.util.call_func_by_name(G=G_gpu, D=D_gpu, opt=G_opt, training_set=training_set, minibatch_size=minibatch_split, **G_loss_args)
+                G_loss = dnnlib.util.call_func_by_name(G=G_gpu, E=E_gpu, Dx=Dx_gpu, Dz=Dz_gpu, opt=G_opt, training_set=training_set, minibatch_size=minibatch_split, reals=reals, labels=labels, **G_loss_args)
             with tf.name_scope('D_loss'), tf.control_dependencies(lod_assign_ops):
-                D_loss = dnnlib.util.call_func_by_name(G=G_gpu, D=D_gpu, opt=D_opt, training_set=training_set, minibatch_size=minibatch_split, reals=reals, labels=labels, **D_loss_args)
-            G_opt.register_gradients(tf.reduce_mean(G_loss), G_gpu.trainables)
-            D_opt.register_gradients(tf.reduce_mean(D_loss), D_gpu.trainables)
+                D_loss = dnnlib.util.call_func_by_name(G=G_gpu, E=E_gpu, Dx=Dx_gpu, Dz=Dz_gpu, opt=D_opt, training_set=training_set, minibatch_size=minibatch_split, reals=reals, labels=labels, **D_loss_args)
+            G_opt.register_gradients(tf.reduce_mean(G_loss), [*G_gpu.trainables.values()]+[*E_gpu.trainables.values()])
+            D_opt.register_gradients(tf.reduce_mean(D_loss), [*Dx_gpu.trainables.values()]+[*Dz_gpu.trainables.values()])
     G_train_op = G_opt.apply_updates()
     D_train_op = D_opt.apply_updates()
 
@@ -260,7 +266,7 @@ def training_loop(
                 misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
             if cur_tick % network_snapshot_ticks == 0 or done or cur_tick == 1:
                 pkl = os.path.join(submit_config.run_dir, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
-                misc.save_pkl((G, D, Gs), pkl)
+                misc.save_pkl((G, E, Dx, Dz, Gs), pkl)
                 metrics.run(pkl, run_dir=submit_config.run_dir, num_gpus=submit_config.num_gpus, tf_config=tf_config)
 
             # Update summaries and RunContext.
@@ -270,7 +276,7 @@ def training_loop(
             maintenance_time = ctx.get_last_update_interval() - tick_time
 
     # Write final results.
-    misc.save_pkl((G, D, Gs), os.path.join(submit_config.run_dir, 'network-final.pkl'))
+    misc.save_pkl((G, E, Dx, Dz, Gs), os.path.join(submit_config.run_dir, 'network-final.pkl'))
     summary_log.close()
 
     ctx.close()
