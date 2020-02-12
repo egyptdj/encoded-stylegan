@@ -160,7 +160,7 @@ def training_loop(
             Dx = tflib.Network('Dx', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **Dx_args)
             Dz = tflib.Network('Dz', label_size=training_set.label_size, **Dz_args)
             Gs = G.clone('Gs')
-    G.print_layers(); D.print_layers()
+    G.print_layers(); E.print_layers(); Dx.print_layers(); Dz.print_layers()
 
     print('Building TensorFlow graph...')
     with tf.name_scope('Inputs'), tf.device('/cpu:0'):

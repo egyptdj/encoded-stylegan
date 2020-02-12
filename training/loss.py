@@ -181,12 +181,17 @@ def G_lsgan_cycle(G, E, Dx, Dz, opt, training_set, minibatch_size, reals, labels
     fake_images_out = G.get_output_for(latents, labels, is_training=True)
     fake_images_scores_out = fp32(Dx.get_output_for(fake_images_out, labels, is_training=True))
     cycle_latents_out = E.get_output_for(fake_images_out, labels, is_training=True)
+    cycle_latents_scores_out = tf.reduce_mean(tf.abs(cycle_latents_out-latents))
 
     fake_latents_out = E.get_output_for(reals, labels, is_training=True)
     fake_latents_scores_out = fp32(Dz.get_output_for(fake_latents_out, labels, is_training=True))
     cycle_images_out = G.get_output_for(fake_latents_out, labels, is_training=True)
+    cycle_images_scores_out = tf.reduce_mean(tf.abs(cycle_images_out-reals))
 
-    loss = tf.reduce_mean(tf.square(fake_images_scores_out-tf.ones_like(fake_images_scores_out))) + cycle_consistency * tf.reduce_mean(tf.sum(cycle_latents_out-latents)) + tf.reduce_mean(tf.square(fake_latents_scores_out-tf.ones_like(fake_latents_scores_out))) + cycle_consistency * tf.reduce_mean(tf.sum(cycle_images_out-images))
+    cycle_latents_scores_out = autosummary('Loss/scores/cycle_latent', cycle_latents_scores_out)
+    cycle_images_scores_out = autosummary('Loss/scores/cycle_image', cycle_images_scores_out)
+
+    loss = tf.reduce_mean(tf.square(fake_images_scores_out-tf.ones_like(fake_images_scores_out))) + cycle_consistency * cycle_latents_scores_out + tf.reduce_mean(tf.square(fake_latents_scores_out-tf.ones_like(fake_latents_scores_out))) + cycle_consistency * cycle_images_scores_out
     return loss
 
 def D_lsgan_cycle(G, E, Dx, Dz, opt, training_set, minibatch_size, reals, labels): # pylint: disable=unused-argument
@@ -196,7 +201,7 @@ def D_lsgan_cycle(G, E, Dx, Dz, opt, training_set, minibatch_size, reals, labels
     fake_images_scores_out = fp32(Dx.get_output_for(fake_images_out, labels, is_training=True))
 
     fake_latents_out = E.get_output_for(reals, labels, is_training=True)
-    real_latents_scores_out = fp32(Dx.get_output_for(tf.random_normal([minibatch_size] + G.input_shapes[0][1:]), labels, is_training=True))
+    real_latents_scores_out = fp32(Dz.get_output_for(tf.random_normal([minibatch_size] + G.input_shapes[0][1:]), labels, is_training=True))
     fake_latents_scores_out = fp32(Dz.get_output_for(fake_latents_out, labels, is_training=True))
 
     real_latents_scores_out = autosummary('Loss/scores/real_latent', real_latents_scores_out)

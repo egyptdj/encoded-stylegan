@@ -324,9 +324,11 @@ def D_paper(
 
 def E_paper(
     images_in,                          # First input: Images [minibatch, channel, height, width].
-    out_shape        = [512],        # Output shape
+    labels_in,
+    out_shape           = [512],        # Output shape
     num_channels        = 1,            # Number of input color channels. Overridden based on dataset.
     resolution          = 32,           # Input resolution. Overridden based on dataset.
+    label_size          = 0,
     fmap_base           = 8192,         # Overall multiplier for the number of feature maps.
     fmap_decay          = 1.0,          # log2 feature map reduction when doubling the resolution.
     fmap_max            = 512,          # Maximum number of feature maps in any layer.
@@ -335,8 +337,7 @@ def E_paper(
     mbstd_group_size    = 4,            # Group size for the minibatch standard deviation layer, 0 = disable.
     mbstd_num_features  = 1,            # Number of features for the minibatch standard deviation layer.
     dtype               = 'float32',    # Data type to use for activations and outputs.
-    fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
-    blur_filter         = [1,2,1],      # Low-pass filter to apply when resampling activations. None = no filtering.
+    fused_scale         = True,       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
     structure           = 'auto',       # 'fixed' = no progressive growing, 'linear' = human-readable, 'recursive' = efficient, 'auto' = select automatically.
     is_template_graph   = False,        # True = template graph constructed by the Network class, False = actual evaluation.
     **_kwargs):                         # Ignore unrecognized keyword args.
@@ -344,13 +345,14 @@ def E_paper(
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
     def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
-    def blur(x): return blur2d(x, blur_filter) if blur_filter else x
     if structure == 'auto': structure = 'linear' if is_template_graph else 'recursive'
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[nonlinearity]
     out_fmap = np.prod(out_shape)
 
     images_in.set_shape([None, num_channels, resolution, resolution])
+    labels_in.set_shape([None, label_size])
     images_in = tf.cast(images_in, dtype)
+    labels_in = tf.cast(labels_in, dtype)
     lod_in = tf.cast(tf.get_variable('lod', initializer=np.float32(0.0), trainable=False), dtype)
     features_out = None
 
@@ -363,8 +365,13 @@ def E_paper(
             if res >= 3: # 8x8 and up
                 with tf.variable_scope('Conv0'):
                     x = act(apply_bias(conv2d(x, fmaps=nf(res-1), kernel=3, gain=gain, use_wscale=use_wscale)))
-                with tf.variable_scope('Conv1_down'):
-                    x = act(apply_bias(conv2d_downscale2d(blur(x), fmaps=nf(res-2), kernel=3, gain=gain, use_wscale=use_wscale, fused_scale=fused_scale)))
+                if fused_scale:
+                    with tf.variable_scope('Conv1_down'):
+                        x = act(apply_bias(conv2d_downscale2d(x, fmaps=nf(res-2), kernel=3, use_wscale=use_wscale)))
+                else:
+                    with tf.variable_scope('Conv1'):
+                        x = act(apply_bias(conv2d(x, fmaps=nf(res-2), kernel=3, use_wscale=use_wscale)))
+                    x = downscale2d(x)
             else: # 4x4
                 if mbstd_group_size > 1:
                     x = minibatch_stddev_layer(x, mbstd_group_size, mbstd_num_features)
@@ -394,7 +401,7 @@ def E_paper(
             img = downscale2d(img)
             y = fromrgb(img, res - 1)
             with tf.variable_scope('Grow_lod%d' % lod):
-                x = tflib.lerp_clip(x, y, lod_in - lod)
+                x = lerp_clip(x, y, lod_in - lod)
         features_out = block(x, 2)
 
     # Recursive structure: complex but efficient.
@@ -405,7 +412,7 @@ def E_paper(
             x = lambda: fromrgb(downscale2d(images_in, 2**lod), res)
             if lod > 0: x = cset(x, (lod_in < lod), lambda: grow(res + 1, lod - 1))
             x = block(x(), res); y = lambda: x
-            if res > 2: y = cset(y, (lod_in > lod), lambda: tflib.lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
+            if res > 2: y = cset(y, (lod_in > lod), lambda: lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
             return y()
         features_out = grow(2, resolution_log2 - 2)
 
