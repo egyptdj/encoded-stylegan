@@ -152,7 +152,7 @@ def training_loop(
         if resume_run_id is not None:
             network_pkl = misc.locate_network_pkl(resume_run_id, resume_snapshot)
             print('Loading networks from "%s"...' % network_pkl)
-            G, E, Dx, Dz, Gs = misc.load_pkl(network_pkl)
+            G, E, Dx, Dz, Gs, Es = misc.load_pkl(network_pkl)
         else:
             print('Constructing networks...')
             G = tflib.Network('G', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **G_args)
@@ -160,6 +160,7 @@ def training_loop(
             Dx = tflib.Network('Dx', num_channels=training_set.shape[0], resolution=training_set.shape[1], label_size=training_set.label_size, **Dx_args)
             Dz = tflib.Network('Dz', label_size=training_set.label_size, **Dz_args)
             Gs = G.clone('Gs')
+            Es = E.clone('Es')
     G.print_layers(); E.print_layers(); Dx.print_layers(); Dz.print_layers()
 
     print('Building TensorFlow graph...')
@@ -191,6 +192,7 @@ def training_loop(
     D_train_op = D_opt.apply_updates()
 
     Gs_update_op = Gs.setup_as_moving_average_of(G, beta=Gs_beta)
+    Es_update_op = Es.setup_as_moving_average_of(E, beta=Gs_beta)
     with tf.device('/gpu:0'):
         try:
             peak_gpu_mem_op = tf.contrib.memory_stats.MaxBytesInUse()
@@ -233,7 +235,7 @@ def training_loop(
         # Run training ops.
         for _mb_repeat in range(minibatch_repeats):
             for _D_repeat in range(D_repeats):
-                tflib.run([D_train_op, Gs_update_op], {lod_in: sched.lod, lrate_in: sched.D_lrate, minibatch_in: sched.minibatch})
+                tflib.run([D_train_op, Gs_update_op, Es_update_op], {lod_in: sched.lod, lrate_in: sched.D_lrate, minibatch_in: sched.minibatch})
                 cur_nimg += sched.minibatch
             tflib.run([G_train_op], {lod_in: sched.lod, lrate_in: sched.G_lrate, minibatch_in: sched.minibatch})
 
@@ -264,9 +266,14 @@ def training_loop(
             if cur_tick % image_snapshot_ticks == 0 or done:
                 grid_fakes = Gs.run(grid_latents, grid_labels, is_validation=True, minibatch_size=sched.minibatch//submit_config.num_gpus)
                 misc.save_image_grid(grid_fakes, os.path.join(submit_config.run_dir, 'fakes%06d.png' % (cur_nimg // 1000)), drange=drange_net, grid_size=grid_size)
+
+                np_reals, np_labels = tflib.run([reals, labels], {lod_in: sched.lod, minibatch_in: submit_config.num_gpus})
+                encoded_image = Gs.run(E.run(np_reals, np_labels, is_validation=True), np_labels, is_validation=True)
+                misc.save_image_grid(np_reals, os.path.join(submit_config.run_dir, 'target%06d.png' % (cur_nimg // 1000)), drange=drange_net)
+                misc.save_image_grid(encoded_image, os.path.join(submit_config.run_dir, 'encoded%06d.png' % (cur_nimg // 1000)), drange=drange_net)
             if cur_tick % network_snapshot_ticks == 0 or done or cur_tick == 1:
                 pkl = os.path.join(submit_config.run_dir, 'network-snapshot-%06d.pkl' % (cur_nimg // 1000))
-                misc.save_pkl((G, E, Dx, Dz, Gs), pkl)
+                misc.save_pkl((G, E, Dx, Dz, Gs, Es), pkl)
                 #metrics.run(pkl, run_dir=submit_config.run_dir, num_gpus=submit_config.num_gpus, tf_config=tf_config)
 
             # Update summaries and RunContext.
@@ -276,7 +283,7 @@ def training_loop(
             maintenance_time = ctx.get_last_update_interval() - tick_time
 
     # Write final results.
-    misc.save_pkl((G, E, Dx, Dz, Gs), os.path.join(submit_config.run_dir, 'network-final.pkl'))
+    misc.save_pkl((G, E, Dx, Dz, Gs, Es), os.path.join(submit_config.run_dir, 'network-final.pkl'))
     summary_log.close()
 
     ctx.close()
