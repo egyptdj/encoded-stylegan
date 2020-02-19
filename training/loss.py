@@ -187,10 +187,11 @@ def G_lsgan_cycle(G, E, Dx, Dz, opt, training_set, minibatch_size, reals, labels
     fake_latents_out = fp32(E.get_output_for(reals, labels, is_training=True))
     fake_latents_scores_out = fp32(Dz.get_output_for(fake_latents_out, labels, is_training=True))
     cycle_images_out = G.get_output_for(fake_latents_out, labels, is_training=True)
-    cycle_images_scores_out = tf.reduce_mean(tf.abs(cycle_images_out-reals))
+    # cycle_images_scores_out = tf.reduce_mean(tf.abs(cycle_images_out-reals)) # l1
+    cycle_images_scores_out = -1.0 * tf.image.ssim_multiscale(tf.transpose(cycle_images_out, perm=[0,2,3,1]), tf.transpose(reals, perm=[0,2,3,1]), 2.0) # ms-ssim
 
-    _ = tf.summary.scalar('Loss/scores/cycle_latent', cycle_latents_scores_out)
-    _ = tf.summary.scalar('Loss/scores/cycle_image', cycle_images_scores_out)
+    cycle_latents_scores_out = autosummary('Loss/scores/cycle_latent', cycle_latents_scores_out)
+    cycle_images_scores_out = autosummary('Loss/scores/cycle_image', cycle_images_scores_out)
 
     loss = tf.reduce_mean(tf.square(fake_images_scores_out-tf.ones_like(fake_images_scores_out))) + cycle_consistency * cycle_latents_scores_out + tf.reduce_mean(tf.square(fake_latents_scores_out-tf.ones_like(fake_latents_scores_out))) + cycle_consistency * cycle_images_scores_out
     return loss
@@ -209,6 +210,7 @@ def D_lsgan_cycle(G, E, Dx, Dz, opt, training_set, minibatch_size, reals, labels
     fake_latents_scores_out = autosummary('Loss/scores/fake_latent', fake_latents_scores_out)
     real_images_scores_out = autosummary('Loss/scores/real_image', real_images_scores_out)
     fake_images_scores_out = autosummary('Loss/scores/fake_image', fake_images_scores_out)
+
     loss = tf.reduce_mean(tf.square(real_images_scores_out-tf.ones_like(real_images_scores_out))) + tf.reduce_mean(tf.square(fake_images_scores_out-tf.zeros_like(fake_images_scores_out))) + tf.reduce_mean(tf.square(real_latents_scores_out-tf.ones_like(real_latents_scores_out))) + tf.reduce_mean(tf.square(fake_latents_scores_out-tf.zeros_like(fake_latents_scores_out)))
 
     return loss

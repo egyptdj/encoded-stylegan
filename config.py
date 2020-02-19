@@ -11,7 +11,7 @@
 # Paths.
 
 result_dir = '/media/bispl/workdisk2/encoded_stylegan/results'
-data_dir = '/media/bispl/workdisk/FFHQ_flickrface/tfrecords'
+data_dir = '/media/bispl/workdisk1/HCP/tfrecords'
 cache_dir = 'cache'
 run_dir_ignore = ['results', 'datasets', 'cache', 'images']
 

@@ -18,6 +18,7 @@ import traceback
 import numpy as np
 import tensorflow as tf
 import PIL.Image
+import nilearn as nil
 import dnnlib.tflib as tflib
 
 from training import dataset
@@ -543,6 +544,38 @@ def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
 
 #----------------------------------------------------------------------------
 
+def create_from_nifti(tfrecord_dir, nifti_dir):
+    print('Loading images from "%s"' % nifti_dir)
+    nifti_filenames = sorted(glob.glob(os.path.join(nifti_dir, '**'), recursive=True))
+    nifti_filenames = [filename for filename in nifti_filenames if 'nii.gz' in filename]
+    if len(nifti_filenames) == 0:
+        error('No input images found')
+    nifti_example = nil.image.load_img(nifti_filenames[0])
+    num_slices = nifti_example.shape[1]-100
+
+    with TFRecordExporter(tfrecord_dir, len(nifti_filenames)) as tfr:
+        labels = np.zeros((len(nifti_filenames)*num_slices, 2))
+        for idx in range(len(nifti_filenames)):
+            nifti = nil.image.load_img(nifti_filenames[idx])
+            img = np.float64(nifti.get_data())
+            img /= img.max() # normalize to 0-1
+            img *= 255.0 # normalize to 0-255
+            img = img[2:258, 50:-50, 2:258] # slice to 256x256, remove truncate end slices
+            for slice_idx in range(num_slices):
+                slice = img[:, slice_idx, :]
+                slice = slice[np.newaxis, :, :]
+                tfr.add_image(slice)
+                if 'T1w' in nifti.get_filename():
+                    labels[idx*num_slices+slice_idx, 0] = 1
+                elif 'T2w' in nifti.get_filename():
+                    labels[idx*num_slices+slice_idx, 1] = 1
+                else:
+                    error('Unknown sequence label')
+            del nifti
+        tfr.add_labels(labels)
+
+#----------------------------------------------------------------------------
+
 def execute_cmdline(argv):
     prog = argv[0]
     parser = argparse.ArgumentParser(
@@ -631,6 +664,11 @@ def execute_cmdline(argv):
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'hdf5_filename',    help='HDF5 archive containing the images')
     p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
+
+    p = add_command(    'create_from_nifti', 'Create dataset from nifti files.',
+                                            'create_from_nifti datasets/hcp ~/downloads/3T_Structural_preproc')
+    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
+    p.add_argument(     'nifti_dir',        help='Directory containing the nifti files')
 
     args = parser.parse_args(argv[1:] if len(argv) > 1 else ['-h'])
     func = globals()[args.command]
