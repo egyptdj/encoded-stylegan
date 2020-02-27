@@ -499,6 +499,42 @@ def create_celeba(tfrecord_dir, celeba_dir, cx=89, cy=121):
             img = img.transpose(2, 0, 1) # HWC => CHW
             tfr.add_image(img)
 
+##----------------------------------------------------------------------------
+
+def create_from_label_images(tfrecord_dir, image_dir, shuffle):
+    print('Loading images from "%s"' % image_dir)
+    labels = sorted(glob.glob(os.path.join(image_dir, '*')))
+    labels = [label.split('/')[-1] for label in labels]
+    num_labels = len(labels)
+    image_filenames_per_label = [sorted(glob.glob(os.path.join(image_dir, label, '*'))) for label in labels]
+    image_filenames = [item for sublist in image_filenames_per_label for item in sublist]
+    np_labels = np.zeros([len(image_filenames), num_labels])
+    if len(image_filenames) == 0:
+       error('No input images found')
+    
+    with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image_filenames))
+        for idx in range(order.size):
+            current_img = image_filenames[order[idx]]
+            img = PIL.Image.open(current_img)
+            img_shape = img.size
+            ratio = 512.0/max(img_shape)
+            new_shape = tuple([int(x*ratio) for x in img_shape])
+            img = img.resize(new_shape)
+            padded_img = PIL.Image.new(img.mode, (512, 512))
+            padded_img.paste(img, ((512-new_shape[0])//2, (512-new_shape[1])//2))
+            padded_img = np.asarray(padded_img)
+            if padded_img.ndim == 2:
+                padded_img = padded_img[np.newaxis, :, :] # HW => CHW
+            elif padded_img.ndim == 3:
+                padded_img = padded_img.transpose([2, 0, 1]) # HWC => CHW
+            else:
+                error('Input images must be stored as RGB or grayscale')
+            tfr.add_image(padded_img)
+            label = current_img.split('/')[-2]
+            np_labels[idx, labels.index(label)] = 1
+        tfr.add_labels(np_labels)
+
 #----------------------------------------------------------------------------
 
 def create_from_images(tfrecord_dir, image_dir, shuffle):
@@ -547,24 +583,33 @@ def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
 def create_from_nifti(tfrecord_dir, nifti_dir):
     print('Loading images from "%s"' % nifti_dir)
     nifti_filenames = sorted(glob.glob(os.path.join(nifti_dir, '**'), recursive=True))
-    nifti_filenames = [filename for filename in nifti_filenames if 'nii.gz' in filename]
+    nifti_filenames = [filename for filename in nifti_filenames if 'acpc_dc_restore.nii.gz' in filename]
     if len(nifti_filenames) == 0:
         error('No input images found')
     nifti_example = nil.image.load_img(nifti_filenames[0])
-    num_slices = nifti_example.shape[1]-100
+    img_shape = nifti_example.shape[:2]
+    num_slices = 170
+    ratio = 256.0/max(img_shape)
+    new_shape = tuple([int(x*ratio) for x in img_shape])
 
     with TFRecordExporter(tfrecord_dir, len(nifti_filenames)) as tfr:
         labels = np.zeros((len(nifti_filenames)*num_slices, 2))
-        for idx in range(len(nifti_filenames)):
-            nifti = nil.image.load_img(nifti_filenames[idx])
+        for idx, filename in enumerate(nifti_filenames):
+            nifti = nil.image.load_img(filename)
             img = np.float64(nifti.get_data())
             img /= img.max() # normalize to 0-1
             img *= 255.0 # normalize to 0-255
-            img = img[2:258, 50:-50, 2:258] # slice to 256x256, remove truncate end slices
+            img = img[:, :, 25:195] # truncate end slices
+            img = np.rot90(img, axes=(0,1)) # rotate to anatomical axes
             for slice_idx in range(num_slices):
-                slice = img[:, slice_idx, :]
-                slice = slice[np.newaxis, :, :]
-                tfr.add_image(slice)
+                slice = img[:, :, slice_idx]
+                slice = PIL.Image.fromarray(np.uint8(slice))
+                slice = slice.resize(new_shape)
+                padded_slice = PIL.Image.new(slice.mode, (256, 256))
+                padded_slice.paste(slice, ((256-new_shape[0])//2, (256-new_shape[1])//2))
+                padded_slice = np.asarray(padded_slice)
+                padded_slice = padded_slice[np.newaxis, :, :]
+                tfr.add_image(padded_slice)
                 if 'T1w' in nifti.get_filename():
                     labels[idx*num_slices+slice_idx, 0] = 1
                 elif 'T2w' in nifti.get_filename():
@@ -669,6 +714,12 @@ def execute_cmdline(argv):
                                             'create_from_nifti datasets/hcp ~/downloads/3T_Structural_preproc')
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'nifti_dir',        help='Directory containing the nifti files')
+
+    p = add_command(    'create_from_label_images', 'Create dataset from images divided by labels as folder names.',
+                                            'create_from_nlabel_images datasets/oct ~/downloads/oct')
+    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
+    p.add_argument(     'image_dir',        help='Directory containing the nifti files')
+    p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
 
     args = parser.parse_args(argv[1:] if len(argv) > 1 else ['-h'])
     func = globals()[args.command]
