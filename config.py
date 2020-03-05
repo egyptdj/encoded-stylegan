@@ -10,8 +10,8 @@
 #----------------------------------------------------------------------------
 # Paths.
 
-result_dir = 'results'
-data_dir = 'datasets'
+result_dir = '/media/bispl/workdisk2/encoded_stylegan/results'
+data_dir = '/media/bispl/workdisk1/OCT/OCT_gaussian_cartesian/tfrecords'
 cache_dir = 'cache'
 run_dir_ignore = ['results', 'datasets', 'cache']
 

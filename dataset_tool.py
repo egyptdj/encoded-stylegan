@@ -528,6 +528,43 @@ def create_from_images(tfrecord_dir, image_dir, shuffle):
 
 #----------------------------------------------------------------------------
 
+def create_from_label_images(tfrecord_dir, image_dir, shuffle):
+    print('Loading images from "%s"' % image_dir)
+    labels = sorted(glob.glob(os.path.join(image_dir, '*')))
+    labels = [label.split('/')[-1] for label in labels]
+    num_labels = len(labels)
+    image_filenames_per_label = [sorted(glob.glob(os.path.join(image_dir, label, '*'))) for label in labels]
+    image_filenames = [item for sublist in image_filenames_per_label for item in sublist]
+    np_labels = np.zeros([len(image_filenames), num_labels])
+    if len(image_filenames) == 0:
+       error('No input images found')
+
+    with TFRecordExporter(tfrecord_dir, len(image_filenames)) as tfr:
+        order = tfr.choose_shuffled_order() if shuffle else np.arange(len(image_filenames))
+        for idx in range(order.size):
+            current_img = image_filenames[order[idx]]
+            img = PIL.Image.open(current_img)
+            img_shape = img.size
+            ratio = 512.0/max(img_shape)
+            new_shape = tuple([int(x*ratio) for x in img_shape])
+            img = img.resize(new_shape)
+            padded_img = PIL.Image.new(img.mode, (512, 512))
+            padded_img.paste(img, ((512-new_shape[0])//2, (512-new_shape[1])//2))
+            # padded_img = padded_img.convert('L')
+            padded_img = np.asarray(padded_img)
+            if padded_img.ndim == 2:
+                padded_img = padded_img[np.newaxis, :, :] # HW => CHW
+            elif padded_img.ndim == 3:
+                padded_img = padded_img.transpose([2, 0, 1]) # HWC => CHW
+            else:
+                error('Input images must be stored as RGB or grayscale')
+            tfr.add_image(padded_img)
+            label = current_img.split('/')[-2]
+            np_labels[idx, labels.index(label)] = 1
+        tfr.add_labels(np_labels)
+
+#----------------------------------------------------------------------------
+
 def create_from_hdf5(tfrecord_dir, hdf5_filename, shuffle):
     print('Loading HDF5 archive from "%s"' % hdf5_filename)
     import h5py # conda install h5py
@@ -630,6 +667,12 @@ def execute_cmdline(argv):
                                             'create_from_hdf5 datasets/celebahq ~/downloads/celeba-hq-1024x1024.h5')
     p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
     p.add_argument(     'hdf5_filename',    help='HDF5 archive containing the images')
+    p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
+
+    p = add_command(    'create_from_label_images', 'Create dataset from images divided by labels as folder names.',
+                                            'create_from_nlabel_images datasets/oct ~/downloads/oct')
+    p.add_argument(     'tfrecord_dir',     help='New dataset directory to be created')
+    p.add_argument(     'image_dir',        help='Directory containing the nifti files')
     p.add_argument(     '--shuffle',        help='Randomize image order (default: 1)', type=int, default=1)
 
     args = parser.parse_args(argv[1:] if len(argv) > 1 else ['-h'])

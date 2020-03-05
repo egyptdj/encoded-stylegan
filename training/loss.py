@@ -175,3 +175,21 @@ def D_logistic_simplegp(G, D, opt, training_set, minibatch_size, reals, labels, 
     return loss
 
 #----------------------------------------------------------------------------
+
+def G_lsgan(G, D, opt, training_set, minibatch_size): # pylint: disable=unused-argument
+    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+    labels = training_set.get_random_labels_tf(minibatch_size)
+    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
+    loss = tf.reduce_mean(tf.square(fake_scores_out-tf.ones_like(fake_scores_out)))
+    return loss
+
+def D_lsgan(G, D, opt, training_set, minibatch_size, reals, labels): # pylint: disable=unused-argument
+    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    real_scores_out = fp32(D.get_output_for(reals, labels, is_training=True))
+    fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
+    real_scores_out = autosummary('Loss/scores/real', real_scores_out)
+    fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
+    loss = tf.reduce_mean(tf.square(real_scores_out-tf.ones_like(real_scores_out))) + tf.reduce_mean(tf.square(fake_scores_out-tf.zeros_like(fake_scores_out)))
+    return loss
