@@ -289,7 +289,7 @@ def D_paper(
                 with tf.variable_scope('Dense0'):
                     x = act(apply_bias(dense(x, fmaps=nf(res-2), use_wscale=use_wscale)))
                 with tf.variable_scope('Dense1'):
-                    x = apply_bias(dense(x, fmaps=1, gain=1, use_wscale=use_wscale))
+                    x = apply_bias(dense(x, fmaps=max(label_size, 1), gain=1, use_wscale=use_wscale))
             return x
 
     # Linear structure: simple but inefficient.
@@ -314,6 +314,11 @@ def D_paper(
             if res > 2: y = cset(y, (lod_in > lod), lambda: lerp(x, fromrgb(downscale2d(images_in, 2**(lod+1)), res - 1), lod_in - lod))
             return y()
         scores_out = grow(2, resolution_log2 - 2)
+
+    # Label conditioning from "Which Training Methods for GANs do actually Converge?"
+    if label_size:
+        with tf.variable_scope('LabelSwitch'):
+            scores_out = tf.reduce_sum(scores_out * labels_in, axis=1, keepdims=True)
 
     assert scores_out.dtype == tf.as_dtype(dtype)
     scores_out = tf.identity(scores_out, name='scores_out')
