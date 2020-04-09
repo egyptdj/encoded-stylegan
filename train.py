@@ -173,7 +173,7 @@ if 0:
 #----------------------------------------------------------------------------
 # Modified training configs for Progressive Cycle GAN
 
-if 0:
+if 1:
     desc          = 'pcgan'                                                        # Description string included in result subdir name.
     train         = EasyDict(run_func_name='training.training_loop.training_loop') # Options for training loop.
     G             = EasyDict(func_name='training.networks_progan.G_paper')         # Options for generator network.
@@ -182,7 +182,7 @@ if 0:
     Dz            = EasyDict(func_name='training.networks_stylegan.G_mapping', normalize_latents=False)     # Options for latent domain discriminator network.
     G_opt         = EasyDict(beta1=0.0, beta2=0.99, epsilon=1e-8)                  # Options for generator optimizer.
     D_opt         = EasyDict(beta1=0.0, beta2=0.99, epsilon=1e-8)                  # Options for discriminator optimizer.
-    G_loss        = EasyDict(func_name='training.loss.G_lsgan_cycle', cycle_consistency=10.0)                    # Options for generator loss.
+    G_loss        = EasyDict(func_name='training.loss.G_lsgan_cycle', cycle_consistency=5.0)                    # Options for generator loss.
     D_loss        = EasyDict(func_name='training.loss.D_lsgan_cycle')                    # Options for discriminator loss.
     dataset       = EasyDict()                                                     # Options for load_dataset().
     sched         = EasyDict()                                                     # Options for TrainingSchedule.
@@ -270,7 +270,7 @@ if 0:
 #----------------------------------------------------------------------------
 # Modified training configs for Progressive Cycle-Bridge GAN
 
-if 1:
+if 0:
     desc          = 'pcbgan'                                                        # Description string included in result subdir name.
     train         = EasyDict(run_func_name='training.training_loop.training_loop') # Options for training loop.
     G             = EasyDict(func_name='training.networks_progan.G_paper')         # Options for generator network.
@@ -371,7 +371,7 @@ if 1:
 
 def main():
     kwargs = EasyDict(train)
-    kwargs.update(G_args=G, E_args=E, B_args=B, Dx_args=Dx, Dz_args=Dz, G_opt_args=G_opt, D_opt_args=D_opt, G_loss_args=G_loss, D_loss_args=D_loss)
+    kwargs.update(G_args=G, E_args=E, Dx_args=Dx, Dz_args=Dz, G_opt_args=G_opt, D_opt_args=D_opt, G_loss_args=G_loss, D_loss_args=D_loss)
     kwargs.update(dataset_args=dataset, sched_args=sched, grid_args=grid, metric_arg_list=metrics, tf_config=tf_config)
     kwargs.submit_config = copy.deepcopy(submit_config)
     kwargs.submit_config.run_dir_root = dnnlib.submission.submit.get_template_from_path(config.result_dir)
